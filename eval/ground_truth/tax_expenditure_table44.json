@@ -1,0 +1,12 @@
+{
+  "document": "tax_expenditure_ethiopia_2021_22.pdf",
+  "page": 21,
+  "note": "Table 4.4 Different estimates of total tax expenditures (in ETB billions). Clean entity-major table: row label is the estimate source, columns are fiscal years 2018/19, 2019/20, 2020/21. Blank cells are omitted, so short rows carry only their printed values in document order.",
+  "rows": {
+    "This report": [99.3, 78.3, 120.7],
+    "This report, eCMS only": [68.7, 76.4, 120.7],
+    "ECC standard rates as benchmark": [40.0, 45.3, 81.4],
+    "Ministry of Finance (2022)": [68.5],
+    "Ministry of Finance (2020)": [73.9]
+  }
+}

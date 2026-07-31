@@ -1,0 +1,106 @@
+# extraction_rules.yaml — every threshold the pipeline uses, with its evidence.
+# Nothing in here is a guess: each number cites the Stage-0 measurement that justifies it
+# (.refinery/stage0/page_metrics.csv, 1,960 pages across 37 Ethiopian tuning docs, 2026-07-30).
+# To onboard a new document family: re-run scripts/stage0_measure.py on a sample and edit
+# THIS FILE — not code.
+
+measurement:
+  raster_dpi: 150          # rendering resolution for the ink mask
+  cell_pt: 4.0             # coverage-grid cell size in page points
+  ink_cell_min_frac: 0.02  # a cell is "inked" if >=2% of its pixels are ink (filters scan noise)
+
+triage:
+  # origin_type joint gate. Evidence: char_density and image_area_ratio are both strongly
+  # bimodal — 517/1960 pages at density exactly 0; only 194 pages in (0, 0.5);
+  # image_ratio has only 214 pages between 0.25 and 0.75.
+  # Joint rule classifies 650 scanned / 1177 native / 135 mixed (6.9% ambiguous -> honest).
+  # Density alone would misclassify sparse native cover pages; image ratio alone would
+  # misclassify native pages carrying large photos. The rule must stay JOINT.
+  scanned_max_density: 0.5     # chars per 1,000 pt^2, whitespace excluded
+  scanned_min_image_ratio: 0.5
+  native_min_density: 0.5
+  native_max_image_ratio: 0.5
+  # pages matching neither pattern -> origin_type: mixed
+
+  # layout heuristics — v1 DESIGN CONSTANTS, not yet measurements; calibrate when
+  # layout misroutes show up in the ledger
+  layout:
+    min_ruled_lines: 10          # >= this many long straight strokes -> table_heavy
+    figure_min_image_ratio: 0.15 # partial image/drawing presence -> figure_heavy
+    column_bin_pt: 20            # word x-starts are binned this wide
+    column_min_share: 0.20       # a bin holding >= this share of words is a column start
+    column_min_separation_pt: 100
+
+  # keyword domain hints — pluggable strategy; an LLM classifier can replace this list
+  domain_keywords:
+    financial: [revenue, audit, balance sheet, birr, assets, liabilities, profit, fiscal, tax]
+    legal: [hereby, pursuant, regulation, article, proclamation, whereas]
+    technical: [voltage, specification, interface, gpio, protocol, vulnerability]
+    medical: [patient, clinical, dosage, pharmaceutical]
+
+routing:
+  start_rung:
+    native_digital: A
+    mixed: B          # decided 2026-07-30: mixed = sparse pages + text-over-image design
+                      # pages; B handles both, is free/local, keeps the router one-rule-per-class
+    scanned_image: C  # scanned pages' coverage is 0.000 (p95=0.048) — triage decides this,
+                      # tau never referees pages that claim nothing
+    form_fillable: B
+
+coverage:
+  # tau: escalate when coverage < tau. RE-DERIVED 2026-07-30 after M3's figure-claiming
+  # (history: provisional 0.55 while the proxy counted figure ink as unexplained).
+  # Evidence, 1,177 native rung-A pages: min coverage 0.947, median 1.000; scans 0.000;
+  # nothing in between. 0.85 leaves 0.10 margin under the worst honest page ever measured,
+  # while a page that truly lost a table craters 20-40 points and cannot hide above it.
+  # One threshold serves the whole A->B->C ladder: same alarm, cheapest responder first.
+  tau: 0.85
+  # anti-gaming guard: claims must be element-level; any single element covering more than
+  # this fraction of the page is rejected, unless it is a vision element or a figure on a
+  # page where extraction also read text. Evidence for WHY: the synthetic scan's one
+  # full-bleed image object "claims" 100% of the page while extraction recovers zero
+  # characters — measured 2026-07-30 on SYNTH-classB pages 1-3, which scored coverage
+  # 1.000 escalate=False under M3's blanket figure exemption. Companion text is the
+  # evidence that an oversized figure explains decoration instead of unread ink.
+  # Value is a design constant pending M3 measurement.
+  max_element_area_ratio: 0.60
+  # escalation is region-scoped: connected components of the residual, not whole pages.
+  min_region_area_pt2: 900     # ~30x30pt — ignores logos/icons/specks (tune in M3/M5)
+
+writeoffs:
+  # furniture auto-detection: elements at ~the same bbox on more than this fraction of
+  # pages are headers/footers/page-numbers -> written off (declared, never silent).
+  furniture_repeat_ratio: 0.60
+  manual: []                   # per-family YAML overrides go here
+
+budget:
+  max_vlm_usd_per_doc: 0.50
+  vlm_crop_dpi: 200
+
+embeddings:
+  # Anthropic has no embeddings model, so this stays a separate provider.
+  # Any endpoint speaking the OpenAI embeddings shape works — OpenAI, or Voyage AI
+  # (Anthropic's recommended partner: base_url https://api.voyageai.com/v1,
+  # model voyage-3.5-lite, api_key_env VOYAGE_API_KEY). The hash embedder is the
+  # offline fallback (deterministic, NOT semantic) used automatically when no key is set.
+  base_url: https://api.openai.com/v1
+  model: text-embedding-3-small
+  api_key_env: OPENAI_API_KEY
+  dim: 1536
+
+vision:
+  # provider: anthropic -> native Claude Messages API; openai_compatible -> any
+  # OpenAI-style endpoint. The key comes from the environment (or .env via the
+  # loader), never from this file. Prices are per million tokens, for ledger
+  # cost estimates (Haiku 4.5: $1 in / $5 out).
+  provider: anthropic
+  base_url: https://api.anthropic.com
+  model: claude-haiku-4-5
+  api_key_env: ANTHROPIC_API_KEY
+  price_per_mtok_input: 1.0
+  price_per_mtok_output: 5.0
+
+chunking:
+  max_tokens: 900
+  caption_proximity_pt: 40     # a caption within this distance binds to its figure
+  # the five constitution rules are code (ChunkValidator); their parameters live here

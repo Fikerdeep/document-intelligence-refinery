@@ -1,0 +1,10 @@
+{
+  "document": "tax_expenditure_ethiopia_2021_22.pdf",
+  "page": 18,
+  "note": "Table 4.1 Tax expenditures by type (in ETB million). Deliberately the harder case: each row label repeats once per fiscal year block (2018/19, 2019/20, 2020/21), with two columns per block (Imports CIF value, Total expenditure). Values are listed in printed document order across all three blocks.",
+  "rows": {
+    "Capital/investment": [2065.91, 711.02, 2248.04, 730.25, 2739.64, 2820.31],
+    "Second schedule": [23929.54, 4006.69, 11537.10, 2107.99, 5419.60, 1159.05],
+    "Non-capital/second sch.": [462085.37, 94609.29, 458625.81, 75470.76, 553547.63, 116724.33]
+  }
+}

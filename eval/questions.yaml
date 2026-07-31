@@ -1,0 +1,80 @@
+# Question set for agent and retrieval evaluation.
+# answerable: the document states it — the agent must answer WITH citations.
+# adversarial: the document does NOT state it — the agent must return not_found
+#   with zero citations; any fabricated answer here is a hard failure.
+# retrieval entries carry expect_contains + section for the precision experiment.
+
+document: "Consumer Price Index July 2025.pdf"
+
+answerable:
+  - question: "What was general inflation in July EFY 2017?"
+    expect_contains: "13.7"
+    section: "Statistical Bulletin"
+  - question: "For the period March, what was the value reported for the Food measure, not the 12-month moving average one?"
+    expect_contains: "11.7"
+    section: "Statistical Bulletin"
+  - question: "Which year had the highest food inflation?"
+    expect_contains: "40.3"
+    section: "Statistical Bulletin"
+  - question: "How does non-food inflation in May compare to June?"
+    expect_contains: "17.8"
+    section: "Statistical Bulletin"
+
+adversarial:
+  - question: "What was the unemployment rate in July 2025?"
+  - question: "How many staff does the Ethiopian Statistical Service employ?"
+  - question: "What is the forecast for inflation next year?"
+  - question: "What was the exchange rate against the dollar?"
+
+# Sealed-evaluation question set (HANDOFF 4.6), written 2026-07-30 from the
+# documents themselves BEFORE any agent answer was seen. Three answerable
+# questions per document class plus one adversarial, whose only correct
+# outcome is not_found with zero citations.
+holdout:
+  - document: "CBE ANNUAL REPORT 2023-24.pdf"
+    doc_class: "A - native annual report"
+    answerable:
+      - question: "What did CBE's total capital and reserve reach?"
+        expect_contains: "87.9"
+      - question: "What share of CBE's loan disbursement went to the private sector?"
+        expect_contains: "90.8"
+      - question: "How much foreign currency did CBE earn in total for the year?"
+        expect_contains: "3.2"
+    adversarial:
+      - question: "What is CBE's projected profit for the 2030 fiscal year?"
+
+  - document: "Audit Report - 2023.pdf"
+    doc_class: "B - true scan, bilingual, stamped"
+    answerable:
+      - question: "Which institution do these consolidated financial statements belong to?"
+        expect_contains: "Development Bank of Ethiopia"
+      - question: "Under which Financial Reporting Proclamation number must these statements be prepared?"
+        expect_contains: "847/2014"
+      - question: "On which page do the notes to the consolidated and separate financial statements begin?"
+        expect_contains: "13"
+    adversarial:
+      - question: "How many branches did the bank open during the year?"
+
+  - document: "fta_performance_survey_final_report_2022.pdf"
+    doc_class: "C - mixed technical report"
+    answerable:
+      - question: "What percentage of respondents reported participating in budget planning?"
+        expect_contains: "56"
+      - question: "What share of people met with local government representatives in 2022?"
+        expect_contains: "50"
+      - question: "What percentage of federal institutions provide budget and expenditure information to stakeholders?"
+        expect_contains: "72"
+    adversarial:
+      - question: "What was the average household income of the survey respondents?"
+
+  - document: "tax_expenditure_ethiopia_2021_22.pdf"
+    doc_class: "D - table-heavy fiscal"
+    answerable:
+      - question: "What share of tax expenditures did vehicle imports account for in FY 2020/21?"
+        expect_contains: "19.1"
+      - question: "What percentage of tax expenditures came from capital and investment goods exemptions?"
+        expect_contains: "2.3"
+      - question: "Under this report's own estimate, what were total tax expenditures in 2020/21 in ETB billions?"
+        expect_contains: "120.7"
+    adversarial:
+      - question: "What are the projected tax expenditures for FY 2023/24?"

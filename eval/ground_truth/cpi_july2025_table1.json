@@ -1,0 +1,29 @@
+{
+  "document": "Consumer Price Index July 2025.pdf",
+  "page": 2,
+  "source": "hand-labeled by visual inspection of the printed page (2026-07-30)",
+  "columns": ["General", "Food", "Non-Food"],
+  "rows": {
+    "July EFY2009 - July EFY2010": [14.4, 13.4, 15.9],
+    "July EFY2010 - July EFY2011": [12.6, 13.1, 11.9],
+    "July EFY2011 - July EFY2012": [19.9, 23.3, 15.9],
+    "July EFY2012 - July EFY2013": [20.2, 23.2, 16.4],
+    "July EFY2013 - July EFY2014": [33.8, 40.3, 25.2],
+    "July EFY2014 - July EFY2015": [32.5, 31.7, 33.9],
+    "July EFY2015 - July EFY2016": [26.6, 28.1, 24.3],
+    "July EFY2016 - July EFY2017": [16.0, 16.2, 15.8],
+    "July-EFY 2016": [18.6, 20.6, 15.7],
+    "August": [17.2, 18.8, 14.7],
+    "September": [17.5, 19.6, 14.4],
+    "October": [16.1, 19.2, 11.6],
+    "November": [16.9, 18.5, 14.5],
+    "December": [17.0, 18.7, 14.4],
+    "January": [15.5, 15.8, 15.0],
+    "February": [15.0, 14.6, 15.6],
+    "March": [13.5, 11.7, 16.2],
+    "April": [14.4, 12.2, 17.9],
+    "May": [14.4, 12.1, 17.8],
+    "June": [13.9, 11.7, 17.3],
+    "July-EFY 2017": [13.7, 12.1, 16.1]
+  }
+}

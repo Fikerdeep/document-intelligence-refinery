@@ -1,0 +1,85 @@
+"""Qdrant in local mode: the searchable half of the substrate, zero services.
+
+Every point carries the payload navigate-then-search needs: doc_id, section
+path and ancestors, chunk type, pages, content_hash. The store records
+which embedding model built it and refuses queries from any other — mixed
+embeddings fail silently, so they must fail loudly instead.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from pathlib import Path
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import (Distance, FieldCondition, Filter, MatchValue,
+                                  PointStruct, VectorParams)
+
+from refinery.models.ldu import LDU
+from refinery.retrieval.embedder import Embedder
+
+COLLECTION = "refinery"
+
+
+class EmbeddingMismatch(Exception):
+    """The store was built with a different embedding model than the one offered."""
+
+
+class VectorStore:
+    """Ingest LDUs, search within sections, never mix embedding spaces."""
+
+    def __init__(self, path: Path | str, embedder: Embedder):
+        self._embedder = embedder
+        root = Path(path)
+        root.mkdir(parents=True, exist_ok=True)
+        self._meta_path = root / "embedding_meta.json"
+        if self._meta_path.exists():
+            meta = json.loads(self._meta_path.read_text())
+            if meta != {"model": embedder.name, "dim": embedder.dim}:
+                raise EmbeddingMismatch(f"store built with {meta}, "
+                                        f"offered {embedder.name}/{embedder.dim}")
+        else:
+            self._meta_path.write_text(json.dumps(
+                {"model": embedder.name, "dim": embedder.dim}))
+        self._client = QdrantClient(path=str(root / "qdrant"))
+        if not self._client.collection_exists(COLLECTION):
+            self._client.create_collection(
+                COLLECTION, vectors_config=VectorParams(size=embedder.dim,
+                                                        distance=Distance.COSINE))
+
+    def ingest(self, doc_id: str, source_name: str, ldus: list[LDU]) -> int:
+        """Embed and store every LDU; point identity comes from the content hash."""
+        if not ldus:
+            return 0
+        vectors = self._embedder.embed([ldu.content for ldu in ldus])
+        points = []
+        for ldu, vector in zip(ldus, vectors):
+            ancestors = [part.strip() for part in ldu.parent_section.split(">")]
+            points.append(PointStruct(
+                id=str(uuid.uuid5(uuid.NAMESPACE_OID, doc_id + ldu.content_hash)),
+                vector=vector,
+                payload={"doc_id": doc_id, "document": source_name,
+                         "content": ldu.content, "content_hash": ldu.content_hash,
+                         "chunk_type": ldu.chunk_type.value,
+                         "section_path": ldu.parent_section,
+                         "section_ancestors": ancestors,
+                         "pages": ldu.page_refs,
+                         "bbox": [ldu.bbox.x0, ldu.bbox.y0, ldu.bbox.x1, ldu.bbox.y1]}))
+        self._client.upsert(COLLECTION, points)
+        return len(points)
+
+    def search(self, query: str, k: int = 6, section: str | None = None,
+               doc_id: str | None = None) -> list[dict]:
+        """Nearest chunks, optionally scoped to one section subtree or document."""
+        conditions = []
+        if section:
+            conditions.append(FieldCondition(key="section_ancestors",
+                                             match=MatchValue(value=section)))
+        if doc_id:
+            conditions.append(FieldCondition(key="doc_id",
+                                             match=MatchValue(value=doc_id)))
+        hits = self._client.query_points(
+            COLLECTION, query=self._embedder.embed([query])[0], limit=k,
+            query_filter=Filter(must=conditions) if conditions else None).points
+        return [{**hit.payload, "score": round(hit.score, 4)} for hit in hits]

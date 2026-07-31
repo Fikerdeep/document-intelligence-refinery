@@ -1,0 +1,34 @@
+# Corpus manifest — the split is data, so it lives in version control even though the PDFs don't.
+# Source: challenge data.zip (50 PDFs, Ethiopian public documents), local copy in ~/Downloads/data
+#
+# Decisions (2026-07-29 census):
+#   - dropped "CBE Annual Report 2015-16_1.pdf"  — byte-identical duplicate of "CBE Annual Report 2015-16.pdf"
+#   - dropped "Security_Vulnerability_Disclosure_Standard_Procedure_2.pdf" — byte-identical duplicate of _1
+#   - dropped "ETHIO_RE_AT_A_GLANCE_2023_24.pdf" — truncated download (57KB of a ~4.2MB linearized PDF; 0 readable pages)
+#   - holdout = never opened during tuning; includes the four challenge class-example docs on purpose
+#
+# Census reference: 47 usable docs, ~2,600 pages; ~63% native / ~32% scanned / ~5% mixed (provisional heuristic)
+
+holdout:   # in-domain test set — DO NOT measure, tune, or eyeball against these
+  - "CBE ANNUAL REPORT 2023-24.pdf"                 # class A example (native annual report)
+  - "Audit Report - 2023.pdf"                        # class B example (true scan, bilingual, stamps)
+  - "fta_performance_survey_final_report_2022.pdf"   # class C example (mixed technical report)
+  - "tax_expenditure_ethiopia_2021_22.pdf"           # class D example (table-heavy fiscal)
+  - "Annual_Report_JUNE-2023.pdf"
+  - "Consumer Price Index August 2025.pdf"
+  - "Consumer Price Index September 2025.pdf"
+  - "2022_Audited_Financial_Statement_Report.pdf"
+  - "EthSwitch-10th-Annual-Report-202324.pdf"
+  - "2013-E.C-Procurement-information.pdf"           # pure-Amharic scan
+
+oos:       # out-of-sample, different country/institutions — final generalization test
+  - "gao-audit-report-2025.pdf"
+  - "RP-008341-DS-1-raspberry-pi-4-datasheet.pdf"
+  - "cpi.pdf"                                        # BLS CPI release
+
+dropped:
+  - "CBE Annual Report 2015-16_1.pdf"
+  - "Security_Vulnerability_Disclosure_Standard_Procedure_2.pdf"
+  - "ETHIO_RE_AT_A_GLANCE_2023_24.pdf"
+
+# tune = everything in the source folder not listed above (37 docs)
