@@ -23,6 +23,7 @@ from refinery.config import load_rules
 from refinery.coverage import retag_furniture
 from refinery.env import load_env
 from refinery.data import FactTable
+from refinery.data.ledger_store import replace_document
 from refinery.extraction import default_extractors, route_document
 from refinery.pageindex import build_tree, save_tree
 from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
@@ -59,14 +60,11 @@ def main() -> int:
     if furniture or backfilled:
         print(f"writeoffs: {furniture} recurring elements retagged as furniture; "
               f"language back-filled on {backfilled} pages")
-    with open(".refinery/ledger.jsonl", "a") as ledger:
-        for entry in entries:
-            ledger.write(entry.model_dump_json() + "\n")
+    replace_document(".refinery/ledger.jsonl", profile.doc_id, entries)
     escalated = sum(1 for e in entries if "C" in e.strategy_used)
-    spent = sum(e.cost_estimate_usd for e in entries)
     print(f"extraction: {len(extracted.elements)} elements, "
           f"{escalated} pages touched rung C, "
-          f"${spent:.4f} spent")
+          f"${entries[-1].cost_estimate_usd:.4f} spent")
 
     sections = build_sections(extracted.elements)
     ldus, consumed = chunk(extracted.elements, sections,
