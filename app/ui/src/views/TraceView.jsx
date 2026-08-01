@@ -137,6 +137,12 @@ export default function TraceView({ doc }) {
               <div key={c.content_hash} className="chunk">
                 <div className="meta">
                   {c.chunk_type} · p{c.page_refs.join(",")} · {c.token_count} tok ·{" "}
+                  {c.quarantined && (
+                    <span className="tag amber" style={{ marginRight: 6 }}
+                      title="over the token budget — admitted and flagged rather than discarding the document">
+                      quarantined
+                    </span>
+                  )}
                   <span className="hash">{c.content_hash}</span>
                 </div>
                 {c.content.slice(0, 350)}

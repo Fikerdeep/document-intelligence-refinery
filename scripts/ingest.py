@@ -70,8 +70,10 @@ def main() -> int:
     ldus, consumed = chunk(extracted.elements, sections,
                            rules.chunking["max_tokens"],
                            rules.chunking["caption_proximity_pt"])
-    validate(extracted.elements, ldus, consumed, rules.chunking["max_tokens"])
-    print(f"chunking: {len(ldus)} LDUs across {len(sections)} sections (validated)")
+    quarantined = validate(extracted.elements, ldus, consumed,
+                           rules.chunking["max_tokens"])
+    note = f", {len(quarantined)} oversize quarantined" if quarantined else ""
+    print(f"chunking: {len(ldus)} LDUs across {len(sections)} sections (validated{note})")
 
     tree = build_tree(profile, sections, ldus)
     save_tree(tree, profile.doc_id)

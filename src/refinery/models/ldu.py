@@ -44,6 +44,7 @@ class LDU(BaseModel):
     token_count: int = Field(ge=0)
     content_hash: str
     relationships: list[ChunkRef] = Field(default_factory=list)
+    quarantined: bool = False
 
 
 def content_hash(text: str) -> str:

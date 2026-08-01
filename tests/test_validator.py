@@ -1,4 +1,4 @@
-"""Each constitution rule rejects its violation fixture, loudly."""
+"""Pipeline-bug rules reject loudly; shape violations quarantine instead."""
 
 import pytest
 
@@ -30,9 +30,16 @@ def test_phantom_consumption_is_caught():
         validate([_element()], [_ldu()], {0, 7}, max_tokens=100)
 
 
-def test_token_budget_is_enforced():
-    with pytest.raises(ChunkValidationError, match="token_budget"):
-        validate([_element()], [_ldu(tokens=500)], {0}, max_tokens=100)
+def test_oversize_chunk_is_quarantined_not_fatal():
+    good, monster = _ldu(), _ldu(content="huge", tokens=500)
+    quarantined = validate([_element()], [good, monster], {0}, max_tokens=100)
+    assert quarantined == [monster]
+    assert monster.quarantined is True
+    assert good.quarantined is False
+
+
+def test_clean_chunk_set_quarantines_nothing():
+    assert validate([_element()], [_ldu()], {0}, max_tokens=100) == []
 
 
 def test_table_without_header_line_is_caught():
