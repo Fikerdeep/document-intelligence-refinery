@@ -1,9 +1,14 @@
 """The ledger must not stack re-ingest histories: replace per document,
-repair stacked files by keeping the newest row per page."""
+repair stacked files by keeping the newest row per page, and serve the
+same contract from either backend."""
 
 import json
+import os
 
-from refinery.data.ledger_store import dedupe, replace_document
+import pytest
+
+from refinery.data.ledger_store import (FileLedger, PostgresLedger, dedupe,
+                                        open_ledger, replace_document)
 from refinery.models.ledger import LedgerEntry
 
 
@@ -47,3 +52,31 @@ def test_dedupe_repairs_a_stacked_history(tmp_path):
 
 def test_dedupe_missing_file_is_a_noop(tmp_path):
     assert dedupe(tmp_path / "absent.jsonl") == 0
+
+
+def ledger_contract(ledger):
+    assert ledger.entries_for("d1") == []
+    ledger.write("d1", [entry("d1", 1, 0.5), entry("d1", 2, 0.5)])
+    ledger.write("d2", [entry("d2", 1, 0.3)])
+    ledger.write("d1", [entry("d1", 1, 0.1), entry("d1", 2, 0.1)])
+    latest = ledger.entries_for("d1")
+    assert [row["page"] for row in latest] == [1, 2]
+    assert sum(row["cost_estimate_usd"] for row in latest) == 0.2
+    assert len(ledger.entries_for("d2")) == 1
+
+
+def test_file_ledger_honours_the_contract(tmp_path):
+    ledger_contract(FileLedger(tmp_path / "ledger.jsonl"))
+
+
+def test_open_ledger_defaults_to_the_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("REFINERY_DB_URL", raising=False)
+    assert isinstance(open_ledger(tmp_path / "ledger.jsonl"), FileLedger)
+
+
+@pytest.mark.skipif(not os.environ.get("RUN_POSTGRES"),
+                    reason="needs a running Postgres; RUN_POSTGRES=1 to enable")
+def test_postgres_ledger_honours_the_contract():
+    ledger = PostgresLedger(os.environ["REFINERY_DB_URL"])
+    ledger._conn.execute("DELETE FROM ledger")
+    ledger_contract(ledger)

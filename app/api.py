@@ -14,7 +14,6 @@ langchain-anthropic and answers 503 without them.
 from __future__ import annotations
 
 import io
-import json
 import os
 import sqlite3
 from pathlib import Path
@@ -29,6 +28,7 @@ from pydantic import BaseModel
 from refinery.audit import verify_claim
 from refinery.config import load_rules
 from refinery.data import FactTable
+from refinery.data.ledger_store import open_ledger
 from refinery.env import load_env
 from refinery.models.pageindex import PageIndexNode
 from refinery.storage import open_store
@@ -38,6 +38,7 @@ app = FastAPI(title="Document Intelligence Refinery")
 
 REFINERY = Path(os.environ.get("REFINERY_DIR", ".refinery"))
 ARTIFACTS = open_store(REFINERY)
+LEDGER = open_ledger(REFINERY / "ledger.jsonl")
 RULES_PATH = os.environ.get("REFINERY_RULES", "rubric/extraction_rules.yaml")
 QUESTIONS_PATH = os.environ.get("REFINERY_QUESTIONS", "eval/questions.yaml")
 CORPUS_DIRS = [Path(p) for p in os.environ.get(
@@ -53,11 +54,7 @@ def _profile(doc_id: str) -> dict:
 
 
 def _ledger(doc_id: str) -> list[dict]:
-    path = REFINERY / "ledger.jsonl"
-    if not path.exists():
-        return []
-    return [entry for entry in map(json.loads, path.open())
-            if entry["doc_id"] == doc_id]
+    return LEDGER.entries_for(doc_id)
 
 
 def _source_pdf(source_name: str) -> Path:
