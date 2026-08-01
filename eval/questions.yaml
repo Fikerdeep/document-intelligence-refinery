@@ -3,6 +3,13 @@
 # adversarial: the document does NOT state it — the agent must return not_found
 #   with zero citations; any fabricated answer here is a hard failure.
 # retrieval entries carry expect_contains + section for the precision experiment.
+#
+# HISTORICAL BASELINES: every measurement recorded before 2026-08-01 — the sealed
+# evaluation and both 8x5 agent-variance runs — scored the four-question answerable
+# set, whose fourth entry was the single ambiguous non-food question now split in
+# two below. Those baselines are NOT directly comparable to runs against this file:
+# the answerable set is now five questions, and the excluded one has become two
+# scoreable ones. Re-baseline before quoting a delta across that boundary.
 
 document: "Consumer Price Index July 2025.pdf"
 
@@ -16,8 +23,18 @@ answerable:
   - question: "Which year had the highest food inflation?"
     expect_contains: "40.3"
     section: "Statistical Bulletin"
-  - question: "How does non-food inflation in May compare to June?"
+  # Split from a single ambiguous question on 2026-08-01. The original read
+  # "How does non-food inflation in May compare to June?" and named no measure,
+  # but the document prints two that invert the qualitative answer:
+  # year-on-year falls 17.8 -> 17.3, the 12-month moving average rises
+  # 15.7 -> 15.8. No agent behaviour could be scored right or wrong against it,
+  # so it was excluded from agent-fix scoring; these two are scoreable, and the
+  # pair keeps the ambiguity documented rather than buried.
+  - question: "In the year-on-year figures, how does non-food inflation in May compare to June?"
     expect_contains: "17.8"
+    section: "Statistical Bulletin"
+  - question: "In the 12-month moving average, how does non-food inflation in May compare to June?"
+    expect_contains: "15.7"
     section: "Statistical Bulletin"
 
 adversarial:
