@@ -6,5 +6,17 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
 
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: refinery
+      POSTGRES_USER: refinery
+      POSTGRES_PASSWORD: refinery
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
 volumes:
   qdrant_storage:
+  pg_data:

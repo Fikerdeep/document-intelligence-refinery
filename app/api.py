@@ -31,11 +31,13 @@ from refinery.config import load_rules
 from refinery.data import FactTable
 from refinery.env import load_env
 from refinery.models.pageindex import PageIndexNode
+from refinery.storage import open_store
 
 load_env()
 app = FastAPI(title="Document Intelligence Refinery")
 
 REFINERY = Path(os.environ.get("REFINERY_DIR", ".refinery"))
+ARTIFACTS = open_store(REFINERY)
 RULES_PATH = os.environ.get("REFINERY_RULES", "rubric/extraction_rules.yaml")
 QUESTIONS_PATH = os.environ.get("REFINERY_QUESTIONS", "eval/questions.yaml")
 CORPUS_DIRS = [Path(p) for p in os.environ.get(
@@ -44,10 +46,10 @@ CORPUS_DIRS = [Path(p) for p in os.environ.get(
 
 
 def _profile(doc_id: str) -> dict:
-    path = REFINERY / "profiles" / f"{doc_id}.json"
-    if not path.exists():
+    body = ARTIFACTS.get("profiles", doc_id)
+    if body is None:
         raise HTTPException(404, f"unknown doc_id {doc_id}")
-    return json.loads(path.read_text())
+    return body
 
 
 def _ledger(doc_id: str) -> list[dict]:
@@ -69,8 +71,9 @@ def _source_pdf(source_name: str) -> Path:
 @app.get("/api/documents")
 def documents() -> list[dict]:
     docs = []
-    for path in sorted((REFINERY / "profiles").glob("*.json")):
-        profile = json.loads(path.read_text())
+    chunked = set(ARTIFACTS.ids("chunks"))
+    for doc_id in ARTIFACTS.ids("profiles"):
+        profile = ARTIFACTS.get("profiles", doc_id)
         entries = _ledger(profile["doc_id"])
         origins = [page["origin_type"] for page in profile["pages"]]
         docs.append({
@@ -80,8 +83,7 @@ def documents() -> list[dict]:
             "spend": round(sum(entry["cost_estimate_usd"] for entry in entries), 4),
             "vision_pages": sum(1 for entry in entries if "C" in entry["strategy_used"]),
         })
-    docs.sort(key=lambda d: (not (REFINERY / "chunks" / f"{d['doc_id']}.json").exists(),
-                             d["source_name"]))
+    docs.sort(key=lambda d: (d["doc_id"] not in chunked, d["source_name"]))
     return docs
 
 
@@ -121,14 +123,12 @@ def prompts() -> list[dict]:
 def trace(doc_id: str) -> dict:
     profile = _profile(doc_id)
     entries = {entry["page"]: entry for entry in _ledger(doc_id)}
-    tree_path = REFINERY / "pageindex" / f"{doc_id}.json"
-    chunks_path = REFINERY / "chunks" / f"{doc_id}.json"
     return {
         "profile": profile,
         "pages": [{**page, **entries.get(page["page"], {})}
                   for page in profile["pages"]],
-        "tree": json.loads(tree_path.read_text()) if tree_path.exists() else None,
-        "chunks": json.loads(chunks_path.read_text()) if chunks_path.exists() else [],
+        "tree": ARTIFACTS.get("pageindex", doc_id),
+        "chunks": ARTIFACTS.get("chunks", doc_id) or [],
     }
 
 
@@ -184,7 +184,7 @@ def ask(request: AskRequest) -> dict:
     import sys
     sys.path.insert(0, "scripts")
     from ask import build_chat
-    from refinery.agent import (CORPUS_SYSTEM, FigureInspector, load_chunks,
+    from refinery.agent import (CORPUS_SYSTEM, FigureInspector,
                                 make_corpus_tools, make_tools, run_agent)
     from refinery.extraction.vision import AnthropicReader
     from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
@@ -200,7 +200,7 @@ def ask(request: AskRequest) -> dict:
         try:
             return FigureInspector(
                 _source_pdf(source_name),
-                load_chunks(REFINERY / "chunks" / f"{doc_id}.json"),
+                ARTIFACTS.get("chunks", doc_id) or [],
                 reader, rules.budget.vlm_crop_dpi)
         except HTTPException:
             return None
@@ -208,18 +208,20 @@ def ask(request: AskRequest) -> dict:
     system = None
     if request.doc_id == "__all__":
         trees, inspectors = [], {}
-        for tree_path in sorted((REFINERY / "pageindex").glob("*.json")):
-            tree = PageIndexNode.model_validate_json(tree_path.read_text())
+        for doc_id in ARTIFACTS.ids("pageindex"):
+            tree = PageIndexNode.model_validate(ARTIFACTS.get("pageindex", doc_id))
             trees.append(tree)
-            inspector = inspector_for(tree_path.stem, tree.title)
+            inspector = inspector_for(doc_id, tree.title)
             if inspector:
-                inspectors[tree_path.stem] = inspector
+                inspectors[doc_id] = inspector
         tools = make_corpus_tools(trees, store, facts, inspectors)
         system = CORPUS_SYSTEM
     else:
-        tree = PageIndexNode.model_validate_json(
-            (REFINERY / "pageindex" / f"{request.doc_id}.json").read_text())
-        tools = make_tools(tree, store, facts, request.doc_id,
+        body = ARTIFACTS.get("pageindex", request.doc_id)
+        if body is None:
+            raise HTTPException(404, f"no substrate for doc_id {request.doc_id}")
+        tools = make_tools(PageIndexNode.model_validate(body), store, facts,
+                           request.doc_id,
                            inspector_for(request.doc_id,
                                          _profile(request.doc_id)["source_name"]))
     from langgraph.errors import GraphRecursionError
@@ -229,8 +231,8 @@ def ask(request: AskRequest) -> dict:
         return {"answer": "", "status": "no_convergence", "tool_trace": [],
                 "tool_log": [], "citations": [], "doc_id": request.doc_id}
     doc_ids = {}
-    for profile_path in (REFINERY / "profiles").glob("*.json"):
-        profile = json.loads(profile_path.read_text())
+    for doc_id in ARTIFACTS.ids("profiles"):
+        profile = ARTIFACTS.get("profiles", doc_id)
         doc_ids[profile["source_name"]] = profile["doc_id"]
     return {"answer": result.answer, "status": result.status,
             "tool_trace": result.tool_trace, "tool_log": result.tool_log,
@@ -255,8 +257,8 @@ def audit(request: AuditRequest) -> dict:
     verdict = verify_claim(request.claim, FactTable(db), corpus)
     payload = verdict.model_dump()
     if verdict.receipt:
-        for profile_path in (REFINERY / "profiles").glob("*.json"):
-            profile = json.loads(profile_path.read_text())
+        for doc_id in ARTIFACTS.ids("profiles"):
+            profile = ARTIFACTS.get("profiles", doc_id)
             if profile["source_name"] == verdict.receipt["document"]:
                 payload["doc_id"] = profile["doc_id"]
                 break

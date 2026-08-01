@@ -12,14 +12,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from refinery.agent import (CORPUS_SYSTEM, FigureInspector, TOOL_SPECS, load_chunks,
+from refinery.agent import (CORPUS_SYSTEM, FigureInspector, TOOL_SPECS,
                             make_corpus_tools, make_tools, run_agent)
 from refinery.config import load_rules
 from refinery.data import FactTable
@@ -27,15 +26,18 @@ from refinery.env import load_env
 from refinery.extraction.vision import AnthropicReader
 from refinery.models.pageindex import PageIndexNode
 from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
+from refinery.storage import open_store
+
+ARTIFACTS = open_store()
 
 
 def build_inspector(doc_id: str, rules):
     """Wire figure inspection when the source PDF and vision key are both present."""
     key = os.environ.get(rules.vision.api_key_env)
-    profile_path = Path(f".refinery/profiles/{doc_id}.json")
-    if not key or not profile_path.exists():
+    profile = ARTIFACTS.get("profiles", doc_id)
+    if not key or profile is None:
         return None
-    source_name = json.loads(profile_path.read_text())["source_name"]
+    source_name = profile["source_name"]
     corpus_dirs = os.environ.get(
         "REFINERY_CORPUS_DIRS",
         "corpus/tune:corpus/holdout:corpus/oos:corpus/synth").split(":")
@@ -43,7 +45,7 @@ def build_inspector(doc_id: str, rules):
         candidate = Path(folder) / source_name
         if candidate.exists():
             return FigureInspector(candidate,
-                                   load_chunks(f".refinery/chunks/{doc_id}.json"),
+                                   ARTIFACTS.get("chunks", doc_id) or [],
                                    AnthropicReader(rules.vision, key),
                                    rules.budget.vlm_crop_dpi)
     return None
@@ -80,18 +82,20 @@ def main() -> int:
     system = None
     if args.doc_id == "all":
         trees, inspectors = [], {}
-        for path in sorted(Path(".refinery/pageindex").glob("*.json")):
-            trees.append(PageIndexNode.model_validate_json(path.read_text()))
-            inspector = build_inspector(path.stem, rules)
+        for doc_id in ARTIFACTS.ids("pageindex"):
+            trees.append(PageIndexNode.model_validate(
+                ARTIFACTS.get("pageindex", doc_id)))
+            inspector = build_inspector(doc_id, rules)
             if inspector:
-                inspectors[path.stem] = inspector
+                inspectors[doc_id] = inspector
         tools = make_corpus_tools(trees, store, facts, inspectors)
         system = CORPUS_SYSTEM
     else:
-        tree = PageIndexNode.model_validate_json(
-            Path(f".refinery/pageindex/{args.doc_id}.json").read_text())
-        tools = make_tools(tree, store, facts, args.doc_id,
-                           build_inspector(args.doc_id, rules))
+        body = ARTIFACTS.get("pageindex", args.doc_id)
+        if body is None:
+            sys.exit(f"no substrate for doc_id {args.doc_id} — run ingest first")
+        tools = make_tools(PageIndexNode.model_validate(body), store, facts,
+                           args.doc_id, build_inspector(args.doc_id, rules))
 
     result = run_agent(args.question, build_chat(rules), tools, system=system)
     print(f"\n{result.answer}\n\nstatus: {result.status}")

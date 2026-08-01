@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -25,9 +24,10 @@ from refinery.env import load_env
 from refinery.data import FactTable
 from refinery.data.ledger_store import replace_document
 from refinery.extraction import default_extractors, route_document
-from refinery.pageindex import build_tree, save_tree
+from refinery.pageindex import build_tree
 from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
-from refinery.triage import backfill_language, profile_document, save_profile
+from refinery.storage import open_store
+from refinery.triage import backfill_language, profile_document
 
 
 def pick_embedder(rules):
@@ -56,7 +56,8 @@ def main() -> int:
                                           rules.writeoffs.furniture_repeat_ratio)
     extracted = extracted.model_copy(update={"elements": retagged})
     backfilled = backfill_language(profile, extracted)
-    save_profile(profile)
+    artifacts = open_store()
+    artifacts.put("profiles", profile.doc_id, profile.model_dump(mode="json"))
     if furniture or backfilled:
         print(f"writeoffs: {furniture} recurring elements retagged as furniture; "
               f"language back-filled on {backfilled} pages")
@@ -77,11 +78,9 @@ def main() -> int:
     print(f"chunking: {len(ldus)} LDUs across {len(sections)} sections (validated{note})")
 
     tree = build_tree(profile, sections, ldus)
-    save_tree(tree, profile.doc_id)
-    chunks_dir = Path(".refinery/chunks")
-    chunks_dir.mkdir(parents=True, exist_ok=True)
-    (chunks_dir / f"{profile.doc_id}.json").write_text(
-        json.dumps([ldu.model_dump() for ldu in ldus], indent=1))
+    artifacts.put("pageindex", profile.doc_id, tree.model_dump(mode="json"))
+    artifacts.put("chunks", profile.doc_id,
+                  [ldu.model_dump(mode="json") for ldu in ldus])
 
     store = VectorStore(".refinery/store", pick_embedder(rules))
     ingested = store.ingest(profile.doc_id, args.pdf.name, ldus)
