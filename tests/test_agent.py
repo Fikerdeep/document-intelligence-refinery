@@ -5,7 +5,7 @@ import json
 
 import fitz
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from refinery.agent import (CitationError, FigureInspector, make_corpus_tools,
                             make_tools, run_agent)
@@ -306,6 +306,42 @@ def test_not_found_prose_loses_its_markers(substrate):
     assert "[1]" not in result.answer
     assert result.provenance.citations == []
     assert result.dropped_citations == 1
+
+
+class RunawayChat:
+    def invoke(self, messages):
+        return AIMessage(content="", tool_calls=[
+            {"name": "semantic_search", "id": "r", "args": {"query": "more"}}])
+
+
+class WrapupAwareChat:
+    def __init__(self, ldu_hash):
+        self._hash = ldu_hash
+
+    def invoke(self, messages):
+        if any(isinstance(m, HumanMessage) and "Do NOT call another tool" in m.content
+               for m in messages[1:]):
+            return AIMessage(content=json.dumps({
+                "status": "answered", "answer": "Revenue was 4,200 [1].",
+                "citations": [self._hash]}))
+        return AIMessage(content="", tool_calls=[
+            {"name": "semantic_search", "id": "w", "args": {"query": "revenue"}}])
+
+
+def test_runaway_agent_returns_no_convergence_instead_of_crashing(substrate):
+    tools, _ = substrate
+    result = run_agent("Anything?", RunawayChat(), tools, max_tool_rounds=3)
+    assert result.status == "no_convergence"
+    assert result.provenance.citations == []
+
+
+def test_wrapup_nudge_converts_a_runaway_into_an_answer(substrate):
+    tools, ldu_hash = substrate
+    result = run_agent("What was revenue?", WrapupAwareChat(ldu_hash), tools,
+                       max_tool_rounds=4)
+    assert result.status == "answered"
+    assert result.provenance.citations[0].content_hash == ldu_hash
+    assert len(result.tool_trace) == 3
 
 
 def test_not_found_citations_are_stripped_before_resolution(substrate):

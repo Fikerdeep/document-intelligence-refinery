@@ -59,17 +59,29 @@ class AnswerResult(BaseModel):
     dropped_citations: int = 0
 
 
+WRAPUP = (
+    "[tool budget exhausted] Do NOT call another tool. Answer now, following the "
+    "JSON contract, using only the results you already hold — or return not_found."
+)
+
+
 class _State(TypedDict):
     messages: list
     gathered: dict
     trace: list
     log: list
+    rounds: int
+    nudged: bool
 
 
-def _build_graph(chat, tools: dict[str, Callable[..., dict]]):
+def _build_graph(chat, tools: dict[str, Callable[..., dict]], max_tool_rounds: int):
     def agent_node(state: _State) -> dict:
-        reply = chat.invoke(state["messages"])
-        return {"messages": state["messages"] + [reply]}
+        messages, nudged = state["messages"], state["nudged"]
+        if state["rounds"] >= max_tool_rounds - 1 and not nudged:
+            messages = messages + [HumanMessage(content=WRAPUP)]
+            nudged = True
+        reply = chat.invoke(messages)
+        return {"messages": messages + [reply], "nudged": nudged}
 
     def tools_node(state: _State) -> dict:
         last = state["messages"][-1]
@@ -83,7 +95,8 @@ def _build_graph(chat, tools: dict[str, Callable[..., dict]]):
             log = log + [{"tool": call["name"], "args": call["args"], "result": result}]
             messages = messages + [ToolMessage(content=json.dumps(result),
                                                tool_call_id=call["id"])]
-        return {"messages": messages, "gathered": gathered, "trace": trace, "log": log}
+        return {"messages": messages, "gathered": gathered, "trace": trace,
+                "log": log, "rounds": state["rounds"] + 1}
 
     def branch(state: _State) -> str:
         last = state["messages"][-1]
@@ -113,12 +126,25 @@ def run_agent(question: str, chat, tools: dict[str, Callable[..., dict]],
     refusal dressed in receipts would look exactly like an answer. Inline
     ``[n]`` claim markers are validated against the citation list for
     answered verdicts and stripped from not_found prose.
+
+    Termination is defended twice: one round before the budget runs out the
+    model receives a wrap-up order to answer from what it holds, and if it
+    overruns anyway the recursion error is caught and returned as a
+    structured ``no_convergence`` — an honest failure, never a crash.
     """
-    app = _build_graph(chat, tools)
-    state = app.invoke({"messages": [SystemMessage(content=system or SYSTEM),
-                                     HumanMessage(content=question)],
-                        "gathered": {}, "trace": [], "log": []},
-                       config={"recursion_limit": 2 * max_tool_rounds + 2})
+    from langgraph.errors import GraphRecursionError
+
+    app = _build_graph(chat, tools, max_tool_rounds)
+    try:
+        state = app.invoke({"messages": [SystemMessage(content=system or SYSTEM),
+                                         HumanMessage(content=question)],
+                            "gathered": {}, "trace": [], "log": [],
+                            "rounds": 0, "nudged": False},
+                           config={"recursion_limit": 2 * max_tool_rounds + 2})
+    except GraphRecursionError:
+        return AnswerResult(answer="", status="no_convergence",
+                            provenance=ProvenanceChain(citations=[]),
+                            tool_trace=[], tool_log=[])
     final: AIMessage = state["messages"][-1]
     text = final.content if isinstance(final.content, str) else str(final.content)
     try:

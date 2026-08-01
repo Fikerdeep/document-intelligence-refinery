@@ -23,6 +23,7 @@ from refinery.config import load_rules
 from refinery.coverage import retag_furniture
 from refinery.env import load_env
 from refinery.data import FactTable
+from refinery.data.ledger_store import replace_document
 from refinery.extraction import default_extractors, route_document
 from refinery.pageindex import build_tree, save_tree
 from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
@@ -59,9 +60,7 @@ def main() -> int:
     if furniture or backfilled:
         print(f"writeoffs: {furniture} recurring elements retagged as furniture; "
               f"language back-filled on {backfilled} pages")
-    with open(".refinery/ledger.jsonl", "a") as ledger:
-        for entry in entries:
-            ledger.write(entry.model_dump_json() + "\n")
+    replace_document(".refinery/ledger.jsonl", profile.doc_id, entries)
     escalated = sum(1 for e in entries if "C" in e.strategy_used)
     spent = sum(e.cost_estimate_usd for e in entries)
     print(f"extraction: {len(extracted.elements)} elements, "
@@ -72,8 +71,10 @@ def main() -> int:
     ldus, consumed = chunk(extracted.elements, sections,
                            rules.chunking["max_tokens"],
                            rules.chunking["caption_proximity_pt"])
-    validate(extracted.elements, ldus, consumed, rules.chunking["max_tokens"])
-    print(f"chunking: {len(ldus)} LDUs across {len(sections)} sections (validated)")
+    quarantined = validate(extracted.elements, ldus, consumed,
+                           rules.chunking["max_tokens"])
+    note = f", {len(quarantined)} oversize quarantined" if quarantined else ""
+    print(f"chunking: {len(ldus)} LDUs across {len(sections)} sections (validated{note})")
 
     tree = build_tree(profile, sections, ldus)
     save_tree(tree, profile.doc_id)
