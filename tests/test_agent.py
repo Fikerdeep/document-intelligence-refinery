@@ -297,6 +297,25 @@ def test_figure_reading_resolves_as_citation(tmp_path):
     assert result.provenance.citations[0].page == 1
 
 
+def test_uncitable_projections_carry_a_note_and_never_crash(substrate):
+    tools, _ = substrate
+    narrow = tools["structured_query"]("SELECT key, value_num FROM facts")
+    partial = tools["structured_query"](
+        "SELECT key, value_num, content_hash FROM facts")
+    full = tools["structured_query"]("SELECT * FROM facts")
+    assert "note" in narrow and "cannot be cited" in narrow["note"]
+    assert "note" in partial
+    assert "note" not in full
+    assert full["rows"]
+
+
+def test_partial_provenance_row_is_uncitable_not_fatal(substrate):
+    from refinery.agent.citations import gather
+    gathered = {}
+    gather({"rows": [{"content_hash": "abc123", "value_num": 11.7}]}, gathered)
+    assert gathered == {}
+
+
 def test_inline_markers_resolve_to_their_citation(substrate):
     tools, ldu_hash = substrate
     chat = ScriptedChat([

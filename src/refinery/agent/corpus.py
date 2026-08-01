@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from refinery.agent.citations import citable
 from refinery.agent.figures import FigureInspector
 from refinery.agent.loop import CONTRACT
 from refinery.agent.tools import _find_node
@@ -76,9 +77,15 @@ def make_corpus_tools(trees: list[PageIndexNode], store: VectorStore,
 
     def structured_query(sql: str) -> dict:
         try:
-            return {"rows": facts.query(sql)}
+            rows = facts.query(sql)
         except Exception as err:
             return {"error": str(err)}
+        result = {"rows": rows}
+        if rows and not any(citable(row) for row in rows):
+            result["note"] = ("these rows lack full provenance and cannot be "
+                             "cited; re-query with SELECT * to build an answer "
+                             "from them")
+        return result
 
     def inspect_figure(content_hash: str, focus: str = "") -> dict:
         for inspector in inspectors.values():

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from refinery.agent.citations import citable
 from refinery.data.fact_table import FactTable
 from refinery.models.pageindex import PageIndexNode
 from refinery.retrieval.vector_store import VectorStore
@@ -31,8 +32,12 @@ TOOL_SPECS = [
          "required": ["query"]}},
     {"name": "structured_query",
      "description": "SQL SELECT over the facts table "
-                    "(key, period, value_raw, value_num, unit, document, page). Use for "
-                    "exact numbers, comparisons, and aggregates.",
+                    "(key, period, value_raw, value_num, unit, document, page, "
+                    "content_hash, x0, y0, x1, y1). Use for exact numbers, "
+                    "comparisons, and aggregates. Use SELECT * unless you have a "
+                    "reason not to: rows are citable only when they carry "
+                    "content_hash, document, page and the bbox columns, and an "
+                    "answer cannot be built from uncitable rows.",
      "parameters": {"type": "object", "properties": {
          "sql": {"type": "string"}}, "required": ["sql"]}},
     {"name": "inspect_figure",
@@ -98,9 +103,15 @@ def make_tools(tree: PageIndexNode, store: VectorStore, facts: FactTable,
 
     def structured_query(sql: str) -> dict:
         try:
-            return {"rows": facts.scoped_query(sql, tree.title)}
+            rows = facts.scoped_query(sql, tree.title)
         except Exception as err:
             return {"error": str(err)}
+        result = {"rows": rows}
+        if rows and not any(citable(row) for row in rows):
+            result["note"] = ("these rows lack full provenance and cannot be "
+                             "cited; re-query with SELECT * to build an answer "
+                             "from them")
+        return result
 
     def inspect_figure(content_hash: str, focus: str = "") -> dict:
         if inspector is None:

@@ -42,13 +42,26 @@ def strip_markers(text: str) -> str:
     return re.sub(r" {2,}", " ", _MARKER.sub("", text)).strip()
 
 
+PROVENANCE_COLUMNS = ("content_hash", "document", "page", "x0", "y0", "x1", "y1")
+
+
+def citable(row: dict) -> bool:
+    """A row can anchor a citation only when it carries full provenance.
+
+    A hash without its document, page and bbox cannot be resolved into a
+    receipt, so it must count as absent — never as a crash, and never as a
+    citation with missing coordinates.
+    """
+    return all(column in row for column in PROVENANCE_COLUMNS)
+
+
 def gather(tool_result: dict, gathered: dict[str, dict]) -> None:
     """Harvest provenance fields from one tool result into the gathered pool."""
     for hit in tool_result.get("hits", []):
         gathered[hit["content_hash"]] = {
             "document": hit["document"], "page": hit["pages"][0], "bbox": hit["bbox"]}
     for row in tool_result.get("rows", []):
-        if "content_hash" in row:
+        if citable(row):
             gathered[row["content_hash"]] = {
                 "document": row["document"], "page": row["page"],
                 "bbox": [row["x0"], row["y0"], row["x1"], row["y1"]]}
