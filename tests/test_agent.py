@@ -95,6 +95,20 @@ def test_citation_offence_is_corrected_on_retry(substrate):
     assert result.provenance.citations[0].content_hash == ldu_hash
 
 
+def test_final_message_as_content_blocks_still_parses(substrate):
+    tools, ldu_hash = substrate
+    chat = ScriptedChat([
+        AIMessage(content="", tool_calls=[{"name": "semantic_search", "id": "1",
+                                           "args": {"query": "revenue"}}]),
+        AIMessage(content=[{"type": "text", "text": json.dumps({
+            "status": "answered", "answer": "Revenue was 4,200 [1].",
+            "citations": [ldu_hash]})}]),
+    ])
+    result = run_agent("What was revenue?", chat, tools)
+    assert result.status == "answered"
+    assert result.provenance.citations[0].content_hash == ldu_hash
+
+
 def test_not_found_needs_no_citations(substrate):
     tools, _ = substrate
     chat = ScriptedChat([

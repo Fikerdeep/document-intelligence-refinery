@@ -66,6 +66,16 @@ WRAPUP = (
 )
 
 
+def _text(content) -> str:
+    """A message's text whether it arrives as a string or as content blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(block.get("text", "") if isinstance(block, dict) else str(block)
+                       for block in content)
+    return str(content)
+
+
 class _State(TypedDict):
     messages: list
     gathered: dict
@@ -175,18 +185,15 @@ def run_agent(question: str, chat, tools: dict[str, Callable[..., dict]],
                             tool_log=state["log"], dropped_citations=dropped)
 
     final: AIMessage = state["messages"][-1]
-    text = final.content if isinstance(final.content, str) else str(final.content)
     try:
-        return finish(text)
+        return finish(_text(final.content))
     except CitationError as offence:
         correction = chat.invoke(state["messages"] + [HumanMessage(content=(
             f"[citation integrity] {offence} Re-issue your final JSON citing only "
             "content_hash values copied verbatim from tool results this run, or "
             "return not_found."))])
-        corrected = correction.content if isinstance(correction.content, str) \
-            else str(correction.content)
         try:
-            return finish(corrected)
+            return finish(_text(correction.content))
         except CitationError:
             return AnswerResult(answer="", status="citation_error",
                                 provenance=ProvenanceChain(citations=[]),
