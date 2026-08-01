@@ -4,7 +4,9 @@ version = "0.0.1"
 description = "Multi-stage document-extraction pipeline: coverage-residual routing, structure-preserving chunking, provenance-verified answers."
 requires-python = ">=3.11"
 dependencies = [
-    "pymupdf>=1.24",
+    # pinned: find_tables grids are version-sensitive, and the measured table
+    # accuracy numbers are true of 1.28.0 specifically
+    "pymupdf~=1.28.0",
     "pdfplumber>=0.11",
     "pydantic>=2.7",
     "pyyaml>=6.0",

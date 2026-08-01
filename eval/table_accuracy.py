@@ -26,6 +26,24 @@ def normalize(key: str) -> str:
     return " ".join(key.lower().replace("-", " ").split())
 
 
+def match(label: str, exact: dict[str, list[float]],
+          loose: dict[str, dict[str, list[float]]]) -> list[float]:
+    """Values for a truth label: exact literal first, normalized only if unique.
+
+    Normalizing collapses distinct printed labels — CPI p.2 prints both
+    ``July EFY-2017`` and ``July - EFY 2017``, two different table rows
+    carrying different values. Falling back to a normalized bucket when more
+    than one literal shares it would score whichever row happened to be
+    inserted first, so ambiguity is reported as a miss rather than guessed.
+    """
+    if label in exact:
+        return exact[label]
+    candidates = loose.get(normalize(label), {})
+    if len(candidates) == 1:
+        return next(iter(candidates.values()))
+    return []
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--facts", default=".refinery/facts.db")
@@ -40,16 +58,19 @@ def main() -> int:
             "SELECT key, period, value_num FROM facts "
             "WHERE document=? AND page=? ORDER BY rowid",
             (truth["document"], truth["page"])).fetchall()
-        by_label: dict[str, list[float]] = {}
+        exact: dict[str, list[float]] = {}
+        loose: dict[str, dict[str, list[float]]] = {}
         for key, period, value in rows:
             if value is None:
                 continue
-            for label in {normalize(key), normalize(period or "")} - {""}:
-                by_label.setdefault(label, []).append(value)
+            for literal in {key, period or ""} - {""}:
+                exact.setdefault(literal, []).append(value)
+                loose.setdefault(normalize(literal), {}).setdefault(
+                    literal, []).append(value)
 
         print(f"\n{path.name} — {truth['document']} p.{truth['page']}")
         for key, expected in truth["rows"].items():
-            actual = by_label.get(normalize(key), [])
+            actual = match(key, exact, loose)
             total += len(expected)
             if not actual:
                 missing_rows += 1
