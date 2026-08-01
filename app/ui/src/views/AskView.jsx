@@ -81,7 +81,20 @@ export default function AskView({ doc, seeded, onRun }) {
         </div>
       )}
 
-      {result && result.status !== "no_convergence" && (
+      {result && result.status === "citation_error" && (
+        <div className="answer notfound">
+          <div className="text">
+            The agent produced an answer whose citations could not be verified
+            against what its tools actually returned — so the answer was
+            withheld. Nothing unverifiable is ever shown; ask again to retry.
+          </div>
+          <div className="citations">
+            <span className="tag red">citation integrity — answer withheld</span>
+          </div>
+        </div>
+      )}
+
+      {result && result.status !== "no_convergence" && result.status !== "citation_error" && (
         <>
           <div className="trace-steps">
             {result.tool_trace.map((step, i) => (

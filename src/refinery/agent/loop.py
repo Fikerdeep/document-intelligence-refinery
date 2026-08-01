@@ -16,7 +16,8 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from refinery.agent.citations import gather, resolve, strip_markers, validate_markers
+from refinery.agent.citations import (CitationError, gather, resolve, strip_markers,
+                                      validate_markers)
 from refinery.models.provenance import ProvenanceChain
 
 CONTRACT = (
@@ -131,6 +132,12 @@ def run_agent(question: str, chat, tools: dict[str, Callable[..., dict]],
     model receives a wrap-up order to answer from what it holds, and if it
     overruns anyway the recursion error is caught and returned as a
     structured ``no_convergence`` — an honest failure, never a crash.
+
+    Citation integrity degrades the same way: a cited hash no tool returned
+    earns exactly one correction order, and a second offence returns a
+    structured ``citation_error`` with the answer withheld and zero
+    citations — the fabricated answer is never delivered, but nothing
+    crashes.
     """
     from langgraph.errors import GraphRecursionError
 
@@ -145,24 +152,42 @@ def run_agent(question: str, chat, tools: dict[str, Callable[..., dict]],
         return AnswerResult(answer="", status="no_convergence",
                             provenance=ProvenanceChain(citations=[]),
                             tool_trace=[], tool_log=[])
+
+    def finish(text: str) -> AnswerResult:
+        try:
+            start, end = text.index("{"), text.rindex("}") + 1
+            payload = json.loads(text[start:end])
+        except ValueError:
+            payload = {"status": "not_found", "answer": text, "citations": []}
+        status = payload.get("status", "answered")
+        answer = payload.get("answer", "")
+        claimed = payload.get("citations", []) or []
+        if status == "not_found":
+            dropped = len(claimed)
+            answer = strip_markers(answer)
+            claimed = []
+        else:
+            dropped = 0
+            validate_markers(answer, len(claimed))
+        chain = resolve(claimed, state["gathered"])
+        return AnswerResult(answer=answer, status=status,
+                            provenance=chain, tool_trace=state["trace"],
+                            tool_log=state["log"], dropped_citations=dropped)
+
     final: AIMessage = state["messages"][-1]
     text = final.content if isinstance(final.content, str) else str(final.content)
     try:
-        start, end = text.index("{"), text.rindex("}") + 1
-        payload = json.loads(text[start:end])
-    except ValueError:
-        payload = {"status": "not_found", "answer": text, "citations": []}
-    status = payload.get("status", "answered")
-    answer = payload.get("answer", "")
-    claimed = payload.get("citations", []) or []
-    if status == "not_found":
-        dropped = len(claimed)
-        answer = strip_markers(answer)
-        claimed = []
-    else:
-        dropped = 0
-        validate_markers(answer, len(claimed))
-    chain = resolve(claimed, state["gathered"])
-    return AnswerResult(answer=answer, status=status,
-                        provenance=chain, tool_trace=state["trace"],
-                        tool_log=state["log"], dropped_citations=dropped)
+        return finish(text)
+    except CitationError as offence:
+        correction = chat.invoke(state["messages"] + [HumanMessage(content=(
+            f"[citation integrity] {offence} Re-issue your final JSON citing only "
+            "content_hash values copied verbatim from tool results this run, or "
+            "return not_found."))])
+        corrected = correction.content if isinstance(correction.content, str) \
+            else str(correction.content)
+        try:
+            return finish(corrected)
+        except CitationError:
+            return AnswerResult(answer="", status="citation_error",
+                                provenance=ProvenanceChain(citations=[]),
+                                tool_trace=state["trace"], tool_log=state["log"])

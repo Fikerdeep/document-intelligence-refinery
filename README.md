@@ -71,8 +71,9 @@ The reliability mechanisms, each testable alone:
 - **Chunk validator** — every element lands in exactly one chunk; tables keep headers;
   captions bind to figures (`chunking/validator.py`)
 - **Citation integrity** — the model cites content hashes and marks each claim `[n]`;
-  code resolves both against what tools actually returned, or fails hard
-  (`agent/citations.py`)
+  code resolves both against what tools actually returned. An unresolvable citation
+  earns one correction order, then the answer is withheld (`citation_error`) — an
+  unverifiable answer is never delivered (`agent/citations.py`)
 - **Budget guard** — per-document cap on vision spend; exhaustion is recorded, never
   hidden
 - **The ledger** — every routing decision with its coverage, cost, and timing

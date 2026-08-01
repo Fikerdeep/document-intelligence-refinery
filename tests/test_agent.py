@@ -7,7 +7,7 @@ import fitz
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from refinery.agent import (CitationError, FigureInspector, make_corpus_tools,
+from refinery.agent import (FigureInspector, make_corpus_tools,
                             make_tools, run_agent)
 from refinery.data import FactTable
 from refinery.models.bbox import BBox
@@ -66,14 +66,33 @@ def test_numeric_question_goes_through_sql_with_real_citation(substrate):
     assert result.provenance.citations[0].document == "report.pdf"
 
 
-def test_fabricated_citation_is_a_hard_error(substrate):
+def test_fabricated_citation_is_never_delivered(substrate):
     tools, _ = substrate
     chat = ScriptedChat([
         AIMessage(content=json.dumps({"status": "answered", "answer": "Made up.",
                                       "citations": ["deadbeefdeadbeef"]})),
+        AIMessage(content=json.dumps({"status": "answered", "answer": "Still made up.",
+                                      "citations": ["feedfacefeedface"]})),
     ])
-    with pytest.raises(CitationError):
-        run_agent("What was revenue?", chat, tools)
+    result = run_agent("What was revenue?", chat, tools)
+    assert result.status == "citation_error"
+    assert result.answer == ""
+    assert result.provenance.citations == []
+
+
+def test_citation_offence_is_corrected_on_retry(substrate):
+    tools, ldu_hash = substrate
+    chat = ScriptedChat([
+        AIMessage(content="", tool_calls=[{"name": "semantic_search", "id": "1",
+                                           "args": {"query": "revenue"}}]),
+        AIMessage(content=json.dumps({"status": "answered", "answer": "Revenue was 4,200 [1].",
+                                      "citations": ["deadbeefdeadbeef"]})),
+        AIMessage(content=json.dumps({"status": "answered", "answer": "Revenue was 4,200 [1].",
+                                      "citations": [ldu_hash]})),
+    ])
+    result = run_agent("What was revenue?", chat, tools)
+    assert result.status == "answered"
+    assert result.provenance.citations[0].content_hash == ldu_hash
 
 
 def test_not_found_needs_no_citations(substrate):
@@ -279,7 +298,7 @@ def test_inline_markers_resolve_to_their_citation(substrate):
     assert result.provenance.citations[0].content_hash == ldu_hash
 
 
-def test_marker_without_citation_is_a_hard_error(substrate):
+def test_marker_without_citation_is_withheld(substrate):
     tools, ldu_hash = substrate
     chat = ScriptedChat([
         AIMessage(content="", tool_calls=[{"name": "semantic_search", "id": "1",
@@ -287,9 +306,13 @@ def test_marker_without_citation_is_a_hard_error(substrate):
         AIMessage(content=json.dumps({"status": "answered",
                                       "answer": "Revenue was 4,200 [1] and grew [2].",
                                       "citations": [ldu_hash]})),
+        AIMessage(content=json.dumps({"status": "answered",
+                                      "answer": "Revenue was 4,200 [1] and grew [3].",
+                                      "citations": [ldu_hash]})),
     ])
-    with pytest.raises(CitationError):
-        run_agent("What was revenue?", chat, tools)
+    result = run_agent("What was revenue?", chat, tools)
+    assert result.status == "citation_error"
+    assert result.provenance.citations == []
 
 
 def test_not_found_prose_loses_its_markers(substrate):
