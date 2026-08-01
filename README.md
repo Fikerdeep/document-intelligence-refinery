@@ -144,6 +144,29 @@ otherwise pip falls back to compiling docling-parse from source and fails.
 `RUN_DOCLING=1 pytest tests/test_layout_integration.py` verifies rung B after its
 one-time model download.
 
+## Server mode
+
+Everything above runs on files with zero services. For multi-process use —
+the API serving while an ingest runs — the same code switches backends by
+environment variable, no code changes:
+
+```bash
+docker compose up -d                          # qdrant + postgres (ports overridable:
+                                              # REFINERY_PG_PORT / REFINERY_QDRANT_PORT)
+pip install -e ".[pg]"
+export REFINERY_QDRANT_URL=http://localhost:6333
+export REFINERY_DB_URL=postgresql://refinery:refinery@localhost:5432/refinery
+```
+
+Profiles, trees, and chunks land in one Postgres JSONB table; facts in a
+relational table; the ledger keeps full run history with latest-run reads
+(so re-ingest can never double-count); vectors in Qdrant server mode. The
+agent's SQL never touches Postgres — model-written SELECTs always execute
+against in-memory SQLite snapshots of the scoped rows, so the model sees one
+dialect whatever the storage, and scoping stays parse-free. Unset both
+variables and everything falls back to the file layout under `.refinery/`,
+which is how the tests run.
+
 ## Repository
 
 ```

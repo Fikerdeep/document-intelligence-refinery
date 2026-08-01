@@ -21,7 +21,7 @@ from refinery.chunking import build_sections, chunk, validate
 from refinery.config import load_rules
 from refinery.coverage import retag_furniture
 from refinery.env import load_env
-from refinery.data import FactTable
+from refinery.data.fact_table import open_facts
 from refinery.data.ledger_store import open_ledger
 from refinery.extraction import default_extractors, route_document
 from refinery.pageindex import build_tree
@@ -84,7 +84,7 @@ def main() -> int:
 
     store = VectorStore(".refinery/store", pick_embedder(rules))
     ingested = store.ingest(profile.doc_id, args.pdf.name, ldus)
-    facts = FactTable(".refinery/facts.db")
+    facts = open_facts()
     fact_rows = facts.populate(extracted, args.pdf.name)
     print(f"substrate: {ingested} chunks indexed, {fact_rows} fact rows")
     print(f"doc_id: {profile.doc_id}")

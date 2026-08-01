@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from refinery.agent import (CORPUS_SYSTEM, FigureInspector, TOOL_SPECS,
                             make_corpus_tools, make_tools, run_agent)
 from refinery.config import load_rules
-from refinery.data import FactTable
+from refinery.data.fact_table import open_facts
 from refinery.env import load_env
 from refinery.extraction.vision import AnthropicReader
 from refinery.models.pageindex import PageIndexNode
@@ -78,7 +78,7 @@ def main() -> int:
     embedder = CachedEmbedder(APIEmbedder(rules.embeddings, key) if key
                               else HashEmbedder())
     store = VectorStore(".refinery/store", embedder)
-    facts = FactTable(".refinery/facts.db")
+    facts = open_facts()
     system = None
     if args.doc_id == "all":
         trees, inspectors = [], {}

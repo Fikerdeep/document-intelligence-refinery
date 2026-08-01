@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import io
 import os
-import sqlite3
 from pathlib import Path
 
 import fitz
@@ -27,7 +26,7 @@ from pydantic import BaseModel
 
 from refinery.audit import verify_claim
 from refinery.config import load_rules
-from refinery.data import FactTable
+from refinery.data.fact_table import open_facts
 from refinery.data.ledger_store import open_ledger
 from refinery.env import load_env
 from refinery.models.pageindex import PageIndexNode
@@ -55,6 +54,10 @@ def _profile(doc_id: str) -> dict:
 
 def _ledger(doc_id: str) -> list[dict]:
     return LEDGER.entries_for(doc_id)
+
+
+def _facts_available() -> bool:
+    return bool(os.environ.get("REFINERY_DB_URL")) or (REFINERY / "facts.db").exists()
 
 
 def _source_pdf(source_name: str) -> Path:
@@ -131,15 +134,10 @@ def trace(doc_id: str) -> dict:
 
 @app.get("/api/facts/{doc_id}")
 def facts(doc_id: str) -> list[dict]:
-    db = REFINERY / "facts.db"
-    if not db.exists():
+    if not _facts_available():
         return []
     source = _profile(doc_id)["source_name"]
-    rows = sqlite3.connect(db).execute(
-        "SELECT key, period, value_raw, value_num, page FROM facts "
-        "WHERE document=? LIMIT 1000", (source,)).fetchall()
-    return [dict(zip(("key", "period", "value_raw", "value_num", "page"), row))
-            for row in rows]
+    return open_facts(REFINERY / "facts.db").rows_for(source)
 
 
 @app.get("/api/page/{doc_id}/{number}")
@@ -191,7 +189,7 @@ def ask(request: AskRequest) -> dict:
                               else HashEmbedder())
     reader = AnthropicReader(rules.vision, os.environ[rules.vision.api_key_env])
     store = VectorStore(REFINERY / "store", embedder)
-    facts = FactTable(REFINERY / "facts.db")
+    facts = open_facts(REFINERY / "facts.db")
 
     def inspector_for(doc_id: str, source_name: str) -> FigureInspector | None:
         try:
@@ -247,11 +245,10 @@ class AuditRequest(BaseModel):
 
 @app.post("/api/audit")
 def audit(request: AuditRequest) -> dict:
-    db = REFINERY / "facts.db"
-    if not db.exists():
+    if not _facts_available():
         raise HTTPException(409, "no facts ingested yet")
     corpus = next((folder for folder in CORPUS_DIRS if folder.exists()), Path("."))
-    verdict = verify_claim(request.claim, FactTable(db), corpus)
+    verdict = verify_claim(request.claim, open_facts(REFINERY / "facts.db"), corpus)
     payload = verdict.model_dump()
     if verdict.receipt:
         for doc_id in ARTIFACTS.ids("profiles"):

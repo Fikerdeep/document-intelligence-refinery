@@ -36,6 +36,69 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS facts (
     document TEXT, page INTEGER, x0 REAL, y0 REAL, x1 REAL, y1 REAL,
     content_hash TEXT)"""
 
+COLUMNS = ("key", "period", "value_raw", "value_num", "unit", "document",
+           "page", "x0", "y0", "x1", "y1", "content_hash")
+
+
+def run_select(conn: sqlite3.Connection, sql: str) -> list[dict]:
+    """One SELECT against a SQLite connection; anything else is rejected."""
+    if not sql.lstrip().lower().startswith("select"):
+        raise ValueError("only SELECT statements are allowed")
+    cursor = conn.execute(sql)
+    names = [column[0] for column in cursor.description]
+    return [dict(zip(names, row)) for row in cursor.fetchmany(50)]
+
+
+def build_facts(extracted: ExtractedDocument,
+                source_name: str) -> tuple[list[FactRow], int]:
+    """Deterministic fact rows for one document, plus duplicates skipped.
+
+    Each table's orientation is measured rather than assumed (see
+    ``orientation``), a normalizer block period overrides orientation for
+    its row, and repeats of a (document, key, period, value) are skipped so
+    overlapping extractions of one table cannot inflate an aggregate.
+    """
+    facts = []
+    seen: set[tuple[str, str, str, str]] = set()
+    skipped = 0
+    for element in extracted.elements:
+        if element.kind is not ElementKind.TABLE or len(element.table.headers) < 2:
+            continue
+        table = element.table
+        period_major = is_period_major(table.headers, table.rows)
+        row_periods = table.row_periods or []
+        for index, record in enumerate(table.rows):
+            label = " ".join(record[0].split())
+            if not label:
+                continue
+            block = row_periods[index] if index < len(row_periods) else None
+            for header, cell in zip(table.headers[1:], record[1:]):
+                if not cell.strip():
+                    continue
+                heading = " ".join(header.split())
+                if block:
+                    key, period = label, block
+                else:
+                    key = heading if period_major else label
+                    period = label if period_major else heading
+                if not key:
+                    continue
+                value_raw = cell.strip()
+                signature = (source_name, key, period, value_raw)
+                if signature in seen:
+                    skipped += 1
+                    continue
+                seen.add(signature)
+                value_num, unit = parse_number(cell)
+                facts.append(FactRow(
+                    key=key, period=period or None,
+                    value_raw=value_raw, value_num=value_num, unit=unit,
+                    document=source_name, page=element.bbox.page,
+                    bbox=element.bbox,
+                    content_hash=content_hash(
+                        f"{source_name}|{key}|{period}|{value_raw}")))
+    return facts, skipped
+
 
 def parse_number(raw: str) -> tuple[float | None, str | None]:
     """(numeric value, unit) from a printed cell, or (None, None) for prose."""
@@ -71,63 +134,14 @@ class FactTable:
         self.duplicates_skipped = 0
 
     def populate(self, extracted: ExtractedDocument, source_name: str) -> int:
-        """Flatten every table element into FactRow contracts; returns rows added.
+        """Store one document's fact rows; returns how many were added.
 
         Rows already held for ``source_name`` are deleted first, so re-ingesting
         a document replaces its facts rather than doubling them. Population is
-        deterministic, so the rebuilt rows are identical to the ones removed.
-
-        Each table's orientation is measured rather than assumed: a table whose
-        first column holds periods contributes its column headings as keys, so
-        the measure is always the key whichever way the table was printed.
-        A block period forward-filled by the table normalizer overrides
-        orientation for its row: the row label is the key and the block
-        marker is the period, matching how the table was printed.
-
-        Rows repeating a (document, key, period, value) already produced in this
-        pass are skipped and counted in ``duplicates_skipped`` — overlapping
-        extractions of one table must not inflate an aggregate.
+        deterministic (see ``build_facts``), so the rebuilt rows are identical
+        to the ones removed.
         """
-        facts = []
-        seen: set[tuple[str, str, str, str]] = set()
-        skipped = 0
-        for element in extracted.elements:
-            if element.kind is not ElementKind.TABLE or len(element.table.headers) < 2:
-                continue
-            table = element.table
-            period_major = is_period_major(table.headers, table.rows)
-            row_periods = table.row_periods or []
-            for index, record in enumerate(table.rows):
-                label = " ".join(record[0].split())
-                if not label:
-                    continue
-                block = row_periods[index] if index < len(row_periods) else None
-                for header, cell in zip(table.headers[1:], record[1:]):
-                    if not cell.strip():
-                        continue
-                    heading = " ".join(header.split())
-                    if block:
-                        key, period = label, block
-                    else:
-                        key = heading if period_major else label
-                        period = label if period_major else heading
-                    if not key:
-                        continue
-                    value_raw = cell.strip()
-                    signature = (source_name, key, period, value_raw)
-                    if signature in seen:
-                        skipped += 1
-                        continue
-                    seen.add(signature)
-                    value_num, unit = parse_number(cell)
-                    facts.append(FactRow(
-                        key=key, period=period or None,
-                        value_raw=value_raw, value_num=value_num, unit=unit,
-                        document=source_name, page=element.bbox.page,
-                        bbox=element.bbox,
-                        content_hash=content_hash(
-                            f"{source_name}|{key}|{period}|{value_raw}")))
-        self.duplicates_skipped = skipped
+        facts, self.duplicates_skipped = build_facts(extracted, source_name)
         self._conn.execute("DELETE FROM facts WHERE document = ?", (source_name,))
         self._conn.executemany(
             "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -139,11 +153,7 @@ class FactTable:
 
     def query(self, sql: str) -> list[dict]:
         """Run one SELECT; anything else is rejected before touching the database."""
-        if not sql.lstrip().lower().startswith("select"):
-            raise ValueError("only SELECT statements are allowed")
-        cursor = self._conn.execute(sql)
-        names = [column[0] for column in cursor.description]
-        return [dict(zip(names, row)) for row in cursor.fetchmany(50)]
+        return run_select(self._conn, sql)
 
     def scoped_query(self, sql: str, document: str) -> list[dict]:
         """Run one SELECT against a facts table holding only ``document``.
@@ -154,17 +164,21 @@ class FactTable:
         runs there unmodified: a SELECT with no WHERE clause still cannot see
         another document, because no other document is present.
         """
-        if not sql.lstrip().lower().startswith("select"):
-            raise ValueError("only SELECT statements are allowed")
         scoped = sqlite3.connect(":memory:")
         scoped.execute(SCHEMA)
         scoped.executemany(
             "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             self._conn.execute("SELECT * FROM facts WHERE document = ?",
                                (document,)).fetchall())
-        cursor = scoped.execute(sql)
+        return run_select(scoped, sql)
+
+    def rows_for(self, document: str, limit: int = 1000) -> list[dict]:
+        """A document's facts for display: key, period, values, page."""
+        cursor = self._conn.execute(
+            "SELECT key, period, value_raw, value_num, page FROM facts "
+            "WHERE document = ? LIMIT ?", (document, limit))
         names = [column[0] for column in cursor.description]
-        return [dict(zip(names, row)) for row in cursor.fetchmany(50)]
+        return [dict(zip(names, row)) for row in cursor.fetchall()]
 
     def lookup(self, key_words: list[str]) -> list[dict]:
         """Facts whose key contains every given word, case-insensitively."""
@@ -174,3 +188,15 @@ class FactTable:
             [f"%{word.lower()}%" for word in key_words])
         names = [column[0] for column in cursor.description]
         return [dict(zip(names, row)) for row in cursor.fetchall()]
+
+
+def open_facts(path: Path | str = ".refinery/facts.db",
+               dsn: str | None = None):
+    """The configured backend: Postgres when REFINERY_DB_URL is set, else SQLite."""
+    import os
+
+    dsn = dsn or os.environ.get("REFINERY_DB_URL", "")
+    if dsn:
+        from refinery.data.postgres_facts import PostgresFactTable
+        return PostgresFactTable(dsn)
+    return FactTable(path)
