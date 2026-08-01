@@ -46,9 +46,7 @@ def test_open_facts_defaults_to_sqlite(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not os.environ.get("RUN_POSTGRES"),
                     reason="needs a running Postgres; RUN_POSTGRES=1 to enable")
-def test_postgres_backend_honours_the_contract():
+def test_postgres_backend_honours_the_contract(pg_dsn):
     from refinery.data.postgres_facts import PostgresFactTable
 
-    facts = PostgresFactTable(os.environ["REFINERY_DB_URL"])
-    facts._conn.execute("DELETE FROM facts")
-    facts_contract(facts)
+    facts_contract(PostgresFactTable(pg_dsn))

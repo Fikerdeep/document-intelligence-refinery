@@ -76,7 +76,5 @@ def test_open_ledger_defaults_to_the_file(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not os.environ.get("RUN_POSTGRES"),
                     reason="needs a running Postgres; RUN_POSTGRES=1 to enable")
-def test_postgres_ledger_honours_the_contract():
-    ledger = PostgresLedger(os.environ["REFINERY_DB_URL"])
-    ledger._conn.execute("DELETE FROM ledger")
-    ledger_contract(ledger)
+def test_postgres_ledger_honours_the_contract(pg_dsn):
+    ledger_contract(PostgresLedger(pg_dsn))

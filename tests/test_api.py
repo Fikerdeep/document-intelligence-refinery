@@ -40,6 +40,16 @@ def test_documents_lists_ingested_docs(client):
                      "origin": "native_digital", "spend": 0.0, "vision_pages": 0}]
 
 
+def test_malformed_profile_is_flagged_not_fatal(client, tmp_path):
+    (tmp_path / ".refinery" / "profiles" / "bad.json").write_text(
+        json.dumps({"doc_id": "bad", "pages": 4}))
+    response = client.get("/api/documents")
+    assert response.status_code == 200
+    by_id = {doc["doc_id"]: doc for doc in response.json()}
+    assert by_id["d1"]["source_name"] == "doc.pdf"
+    assert "malformed" in by_id["bad"]["source_name"]
+
+
 def test_trace_merges_profile_and_ledger(client):
     trace = client.get("/api/trace/d1").json()
     assert trace["pages"][0]["strategy_used"] == "A"

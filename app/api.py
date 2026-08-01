@@ -74,15 +74,22 @@ def documents() -> list[dict]:
     chunked = set(ARTIFACTS.ids("chunks"))
     for doc_id in ARTIFACTS.ids("profiles"):
         profile = ARTIFACTS.get("profiles", doc_id)
-        entries = _ledger(profile["doc_id"])
-        origins = [page["origin_type"] for page in profile["pages"]]
-        docs.append({
-            "doc_id": profile["doc_id"], "source_name": profile["source_name"],
-            "pages": len(profile["pages"]),
-            "origin": max(set(origins), key=origins.count) if origins else "unknown",
-            "spend": round(sum(entry["cost_estimate_usd"] for entry in entries), 4),
-            "vision_pages": sum(1 for entry in entries if "C" in entry["strategy_used"]),
-        })
+        try:
+            entries = _ledger(profile["doc_id"])
+            origins = [page["origin_type"] for page in profile["pages"]]
+            docs.append({
+                "doc_id": profile["doc_id"], "source_name": profile["source_name"],
+                "pages": len(profile["pages"]),
+                "origin": max(set(origins), key=origins.count) if origins else "unknown",
+                "spend": round(sum(entry["cost_estimate_usd"] for entry in entries), 4),
+                "vision_pages": sum(1 for entry in entries
+                                    if "C" in entry["strategy_used"]),
+            })
+        except (KeyError, TypeError, AttributeError):
+            docs.append({"doc_id": doc_id,
+                         "source_name": f"{doc_id} (malformed profile)",
+                         "pages": 0, "origin": "unknown", "spend": 0.0,
+                         "vision_pages": 0})
     docs.sort(key=lambda d: (d["doc_id"] not in chunked, d["source_name"]))
     return docs
 

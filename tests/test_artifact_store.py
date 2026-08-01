@@ -39,7 +39,5 @@ def test_open_store_defaults_to_files(tmp_path, monkeypatch):
 
 @pytest.mark.skipif(not os.environ.get("RUN_POSTGRES"),
                     reason="needs a running Postgres; RUN_POSTGRES=1 to enable")
-def test_postgres_backend_honours_the_contract():
-    store = PostgresArtifactStore(os.environ["REFINERY_DB_URL"])
-    store._conn.execute("DELETE FROM artifacts")
-    contract(store)
+def test_postgres_backend_honours_the_contract(pg_dsn):
+    contract(PostgresArtifactStore(pg_dsn))
