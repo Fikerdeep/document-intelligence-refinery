@@ -1,4 +1,10 @@
-"""Qdrant in local mode: the searchable half of the substrate, zero services.
+"""Qdrant behind one class: local mode by default, server mode by env.
+
+Local mode needs zero services but locks the store to one process — the
+API server and an ingest cannot run at once. Setting REFINERY_QDRANT_URL
+(or passing ``url``) switches the same class to a Qdrant server, which
+lifts that limit with no other change; ``docker compose up qdrant`` is the
+one-line way to have one.
 
 Every point carries the payload navigate-then-search needs: doc_id, section
 path and ancestors, chunk type, pages, content_hash. The store records
@@ -9,6 +15,7 @@ embeddings fail silently, so they must fail loudly instead.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -29,7 +36,8 @@ class EmbeddingMismatch(Exception):
 class VectorStore:
     """Ingest LDUs, search within sections, never mix embedding spaces."""
 
-    def __init__(self, path: Path | str, embedder: Embedder):
+    def __init__(self, path: Path | str, embedder: Embedder,
+                 url: str | None = None):
         self._embedder = embedder
         root = Path(path)
         root.mkdir(parents=True, exist_ok=True)
@@ -42,7 +50,9 @@ class VectorStore:
         else:
             self._meta_path.write_text(json.dumps(
                 {"model": embedder.name, "dim": embedder.dim}))
-        self._client = QdrantClient(path=str(root / "qdrant"))
+        url = url or os.environ.get("REFINERY_QDRANT_URL", "")
+        self._client = (QdrantClient(url=url) if url
+                        else QdrantClient(path=str(root / "qdrant")))
         if not self._client.collection_exists(COLLECTION):
             self._client.create_collection(
                 COLLECTION, vectors_config=VectorParams(size=embedder.dim,
