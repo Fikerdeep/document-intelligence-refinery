@@ -24,17 +24,25 @@ class ElementKind(str, Enum):
 
 
 class Table(BaseModel):
-    """A table as structure, never as a flattened string."""
+    """A table as structure, never as a flattened string.
+
+    ``row_periods`` carries block periods — a fiscal year printed once per
+    group of rows and forward-filled by the normalizer — one entry per row,
+    None where no block marker governs.
+    """
 
     headers: list[str]
     rows: list[list[str]]
+    row_periods: list[str | None] | None = None
 
     @model_validator(mode="after")
     def _rectangular(self) -> "Table":
-        """Every row must match the header width."""
+        """Every row must match the header width; periods must match rows."""
         bad = [i for i, r in enumerate(self.rows) if len(r) != len(self.headers)]
         if bad:
             raise ValueError(f"ragged rows at indices {bad}")
+        if self.row_periods is not None and len(self.row_periods) != len(self.rows):
+            raise ValueError("row_periods length must match rows")
         return self
 
 

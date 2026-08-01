@@ -14,6 +14,7 @@ from pathlib import Path
 
 import fitz
 
+from refinery.extraction.table_normalizer import normalize
 from refinery.geometry.grid import boxes_mask, connected_regions
 from refinery.identity import doc_id
 from refinery.models.bbox import BBox, from_pymupdf
@@ -38,7 +39,7 @@ def _table_elements(page: fitz.Page, number: int) -> list[Element]:
             kind=ElementKind.TABLE,
             bbox=from_pymupdf(fitz.Rect(tab.bbox), number),
             source_rung=Rung.FAST_TEXT,
-            table=Table(headers=headers, rows=rows)))
+            table=normalize(Table(headers=headers, rows=rows))))
     return elements
 
 

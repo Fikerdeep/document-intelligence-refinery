@@ -80,6 +80,9 @@ class FactTable:
         Each table's orientation is measured rather than assumed: a table whose
         first column holds periods contributes its column headings as keys, so
         the measure is always the key whichever way the table was printed.
+        A block period forward-filled by the table normalizer overrides
+        orientation for its row: the row label is the key and the block
+        marker is the period, matching how the table was printed.
 
         Rows repeating a (document, key, period, value) already produced in this
         pass are skipped and counted in ``duplicates_skipped`` — overlapping
@@ -93,16 +96,21 @@ class FactTable:
                 continue
             table = element.table
             period_major = is_period_major(table.headers, table.rows)
-            for record in table.rows:
+            row_periods = table.row_periods or []
+            for index, record in enumerate(table.rows):
                 label = " ".join(record[0].split())
                 if not label:
                     continue
+                block = row_periods[index] if index < len(row_periods) else None
                 for header, cell in zip(table.headers[1:], record[1:]):
                     if not cell.strip():
                         continue
                     heading = " ".join(header.split())
-                    key = heading if period_major else label
-                    period = label if period_major else heading
+                    if block:
+                        key, period = label, block
+                    else:
+                        key = heading if period_major else label
+                        period = label if period_major else heading
                     if not key:
                         continue
                     value_raw = cell.strip()
