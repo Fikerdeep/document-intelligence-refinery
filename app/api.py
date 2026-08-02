@@ -212,6 +212,9 @@ def ask(request: AskRequest) -> dict:
         trees, inspectors = [], {}
         for doc_id in ARTIFACTS.ids("pageindex"):
             tree = PageIndexNode.model_validate(ARTIFACTS.get("pageindex", doc_id))
+            card = ARTIFACTS.get("cards", doc_id)
+            if card and card.get("summary"):
+                tree = tree.model_copy(update={"summary": card["summary"]})
             trees.append(tree)
             inspector = inspector_for(doc_id, tree.title)
             if inspector:

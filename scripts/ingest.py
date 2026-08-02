@@ -24,7 +24,7 @@ from refinery.env import load_env
 from refinery.data.fact_table import open_facts
 from refinery.data.ledger_store import open_ledger
 from refinery.extraction import default_extractors, route_document
-from refinery.pageindex import build_tree
+from refinery.pageindex import build_card, build_tree
 from refinery.retrieval import APIEmbedder, CachedEmbedder, HashEmbedder, VectorStore
 from refinery.storage import open_store
 from refinery.triage import backfill_language, profile_document
@@ -86,6 +86,8 @@ def main() -> int:
     ingested = store.ingest(profile.doc_id, args.pdf.name, ldus)
     facts = open_facts()
     fact_rows = facts.populate(extracted, args.pdf.name)
+    card = build_card(profile, tree, facts)
+    artifacts.put("cards", profile.doc_id, card.model_dump(mode="json"))
     print(f"substrate: {ingested} chunks indexed, {fact_rows} fact rows")
     print(f"doc_id: {profile.doc_id}")
     return 0

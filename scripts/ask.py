@@ -83,8 +83,11 @@ def main() -> int:
     if args.doc_id == "all":
         trees, inspectors = [], {}
         for doc_id in ARTIFACTS.ids("pageindex"):
-            trees.append(PageIndexNode.model_validate(
-                ARTIFACTS.get("pageindex", doc_id)))
+            tree = PageIndexNode.model_validate(ARTIFACTS.get("pageindex", doc_id))
+            card = ARTIFACTS.get("cards", doc_id)
+            if card and card.get("summary"):
+                tree = tree.model_copy(update={"summary": card["summary"]})
+            trees.append(tree)
             inspector = build_inspector(doc_id, rules)
             if inspector:
                 inspectors[doc_id] = inspector

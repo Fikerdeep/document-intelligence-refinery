@@ -68,12 +68,12 @@ class PostgresFactTable:
         return run_select(self._snapshot("document = %s", (document,)), sql)
 
     def rows_for(self, document: str, limit: int = 1000) -> list[dict]:
-        """A document's facts for display: key, period, values, page."""
+        """A document's facts for display: key, period, values, context, page."""
         rows = self._conn.execute(
-            "SELECT key, period, value_raw, value_num, page FROM facts "
+            "SELECT key, period, value_raw, value_num, context, page FROM facts "
             "WHERE document = %s LIMIT %s", (document, limit)).fetchall()
-        return [dict(zip(("key", "period", "value_raw", "value_num", "page"), row))
-                for row in rows]
+        return [dict(zip(("key", "period", "value_raw", "value_num", "context",
+                          "page"), row)) for row in rows]
 
     def lookup(self, key_words: list[str]) -> list[dict]:
         """Facts whose key contains every given word, case-insensitively."""

@@ -211,9 +211,9 @@ class FactTable:
         return run_select(scoped, sql)
 
     def rows_for(self, document: str, limit: int = 1000) -> list[dict]:
-        """A document's facts for display: key, period, values, page."""
+        """A document's facts for display: key, period, values, context, page."""
         cursor = self._conn.execute(
-            "SELECT key, period, value_raw, value_num, page FROM facts "
+            "SELECT key, period, value_raw, value_num, context, page FROM facts "
             "WHERE document = ? LIMIT ?", (document, limit))
         names = [column[0] for column in cursor.description]
         return [dict(zip(names, row)) for row in cursor.fetchall()]
