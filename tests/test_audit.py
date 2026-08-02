@@ -109,3 +109,18 @@ def test_ranked_document_renders_the_verdict(twin_corpus):
     assert verdict.status == "REFUTED"
     assert verdict.receipt["document"] == "alpha.pdf"
     assert "4,200" in verdict.detail
+
+
+def test_refutation_notes_a_sibling_printing_the_claimed_value(twin_corpus):
+    folder, facts = twin_corpus
+    verdict = verify_claim("Revenue was 3,300 in 2023", facts, folder,
+                           documents=["alpha.pdf", "gamma.pdf"])
+    assert "note: gamma.pdf prints exactly 3300" in verdict.detail
+
+
+def test_no_note_when_the_claimed_value_is_printed_nowhere(twin_corpus):
+    folder, facts = twin_corpus
+    verdict = verify_claim("Revenue was 9,999 in 2023", facts, folder,
+                           documents=["alpha.pdf", "gamma.pdf"])
+    assert verdict.status == "REFUTED"
+    assert "note:" not in verdict.detail

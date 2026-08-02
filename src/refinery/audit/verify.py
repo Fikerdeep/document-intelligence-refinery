@@ -83,6 +83,29 @@ def _candidates(facts: FactTable, words: list[str],
     return []
 
 
+def _printed_elsewhere(facts: FactTable, words: list[str], value: float,
+                       documents: list[str], exclude: str) -> str | None:
+    """The best-ranked other routed document whose facts print exactly ``value``.
+
+    An identity-free claim over same-genre siblings is ambiguous by
+    construction; when the verdict-rendering document refutes it but another
+    routed document prints the claimed value, the verdict says so instead of
+    silently picking a winner.
+    """
+    for name in documents:
+        if name == exclude:
+            continue
+        for size in range(len(words), 0, -1):
+            rows = facts.lookup(words[:size], [name])
+            if not rows:
+                continue
+            if any(row["value_num"] is not None
+                   and abs(row["value_num"] - value) <= 1e-9 for row in rows):
+                return name
+            break
+    return None
+
+
 def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str,
                  documents: list[str] | None = None) -> Verdict:
     """Verify one numeric claim; every verdict names its evidence.
@@ -127,9 +150,14 @@ def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str,
         return sum(1 for token in tokens if token in key_text)
 
     closest = max(candidates, key=overlap)
-    return Verdict(status="REFUTED",
-                   detail=f"claimed {value:g}, but the document prints "
-                          f"{closest['key']} ({closest['period']}) = {closest['value_raw']}",
+    detail = (f"claimed {value:g}, but the document prints "
+              f"{closest['key']} ({closest['period']}) = {closest['value_raw']}")
+    elsewhere = _printed_elsewhere(facts, words, value, documents or [],
+                                   closest["document"])
+    if elsewhere:
+        detail += (f" — note: {elsewhere} prints exactly {value:g}, and the "
+                   "claim does not name its document")
+    return Verdict(status="REFUTED", detail=detail,
                    receipt={"document": closest["document"], "page": closest["page"],
                             "bbox": [closest["x0"], closest["y0"],
                                      closest["x1"], closest["y1"]],
