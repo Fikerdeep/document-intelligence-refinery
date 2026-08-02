@@ -13,6 +13,17 @@
 
 document: "Consumer Price Index July 2025.pdf"
 
+# CORPUS-MODE ROLES, recorded 2026-08-02 after the route-then-bind measurement.
+# The monthly CPI bulletins carry overlapping history, so several of these
+# questions are answerable from more than one of them truthfully. That is a
+# property of the documents, not a defect in the questions, and no question is
+# reworded on account of it. Grounding is therefore scored as CITATION-VERIFIED
+# — the answer is correct AND a cited document verifiably prints the value —
+# rather than by demanding the one document named above.
+#   q1, q3  sibling-discrimination probes: period-pinned, so only one bulletin
+#           can honestly carry them. These are what test routing.
+#   q2, q4, q5  intentionally document-agnostic: July, August and September all
+#           print these values, and any truthful receipt counts.
 answerable:
   - question: "What was general inflation in July EFY 2017?"
     expect_contains: "13.7"
