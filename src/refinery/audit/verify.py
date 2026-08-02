@@ -64,8 +64,14 @@ def _numbers_in(text: str) -> set[float]:
     return values
 
 
-def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str) -> Verdict:
-    """Verify one numeric claim; every verdict names its evidence."""
+def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str,
+                 documents: list[str] | None = None) -> Verdict:
+    """Verify one numeric claim; every verdict names its evidence.
+
+    When ``documents`` is given (the card-routed set), candidate facts come
+    only from those documents — two reports printing the same value can no
+    longer swap receipts. Without it the whole fact table is searched.
+    """
     corpus_dir = Path(corpus_dir)
     value, words = _claim_parts(claim)
     if value is None:
@@ -73,7 +79,7 @@ def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str) -> Verdic
                        detail="no numeric value found in the claim (v1 audits numbers)")
     candidates = []
     for size in range(len(words), 0, -1):
-        candidates = facts.lookup(words[:size])
+        candidates = facts.lookup(words[:size], documents)
         if candidates:
             break
     if not candidates:

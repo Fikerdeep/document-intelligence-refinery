@@ -232,12 +232,18 @@ class FactTable:
         names = [column[0] for column in cursor.description]
         return [dict(zip(names, row)) for row in cursor.fetchall()]
 
-    def lookup(self, key_words: list[str]) -> list[dict]:
-        """Facts whose key contains every given word, case-insensitively."""
+    def lookup(self, key_words: list[str],
+               documents: list[str] | None = None) -> list[dict]:
+        """Facts whose key contains every given word, case-insensitively,
+        optionally scoped to a routed set of documents."""
         clause = " AND ".join("lower(key) LIKE ?" for _ in key_words)
+        params: list = [f"%{word.lower()}%" for word in key_words]
+        if documents:
+            marks = ",".join("?" for _ in documents)
+            clause += f" AND document IN ({marks})"
+            params += documents
         cursor = self._conn.execute(
-            f"SELECT * FROM facts WHERE {clause} LIMIT 25",
-            [f"%{word.lower()}%" for word in key_words])
+            f"SELECT * FROM facts WHERE {clause} LIMIT 25", params)
         names = [column[0] for column in cursor.description]
         return [dict(zip(names, row)) for row in cursor.fetchall()]
 

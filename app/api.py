@@ -273,13 +273,33 @@ class AuditRequest(BaseModel):
     claim: str
 
 
+def _route_claim(claim: str) -> list[str]:
+    """Source names of the card-routed documents for a claim, best first."""
+    from refinery.models.card import DocumentCard
+    from refinery.pageindex.route import route
+
+    cards = [DocumentCard.model_validate(body) for body in
+             (ARTIFACTS.get("cards", i) for i in ARTIFACTS.ids("cards"))
+             if body]
+    if not cards:
+        return []
+    rules = load_rules(RULES_PATH)
+    by_id = {card.doc_id: card for card in cards}
+    return [by_id[d].source_name
+            for d, score in route(claim, cards, k=rules.routing.route_top_k)
+            if score > 0 and d in by_id]
+
+
 @app.post("/api/audit")
 def audit(request: AuditRequest) -> dict:
     if not _facts_available():
         raise HTTPException(409, "no facts ingested yet")
     corpus = next((folder for folder in CORPUS_DIRS if folder.exists()), Path("."))
-    verdict = verify_claim(request.claim, open_facts(REFINERY / "facts.db"), corpus)
+    routed = _route_claim(request.claim)
+    verdict = verify_claim(request.claim, open_facts(REFINERY / "facts.db"),
+                           corpus, documents=routed or None)
     payload = verdict.model_dump()
+    payload["routed"] = routed
     if verdict.receipt:
         for doc_id in ARTIFACTS.ids("profiles"):
             profile = ARTIFACTS.get("profiles", doc_id)

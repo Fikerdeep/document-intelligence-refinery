@@ -31,6 +31,9 @@ def facts_contract(facts):
     assert [row["value_num"] for row in replaced] == [5000.0]
     assert facts.rows_for("b.pdf")[0]["value_raw"] == "9,900"
     assert facts.lookup(["revenue"])
+    scoped_lookup = facts.lookup(["revenue"], ["b.pdf"])
+    assert {row["document"] for row in scoped_lookup} == {"b.pdf"}
+    assert facts.lookup(["revenue"], ["nowhere.pdf"]) == []
     with pytest.raises(ValueError):
         facts.query("DELETE FROM facts")
 

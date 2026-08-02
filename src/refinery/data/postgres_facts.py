@@ -80,10 +80,16 @@ class PostgresFactTable:
         return [dict(zip(("key", "period", "value_raw", "value_num", "context",
                           "page"), row)) for row in rows]
 
-    def lookup(self, key_words: list[str]) -> list[dict]:
-        """Facts whose key contains every given word, case-insensitively."""
+    def lookup(self, key_words: list[str],
+               documents: list[str] | None = None) -> list[dict]:
+        """Facts whose key contains every given word, case-insensitively,
+        optionally scoped to a routed set of documents."""
         clause = " AND ".join("lower(key) LIKE %s" for _ in key_words)
+        params: list = [f"%{word.lower()}%" for word in key_words]
+        if documents:
+            clause += " AND document = ANY(%s)"
+            params.append(documents)
         rows = self._conn.execute(
             f"SELECT {', '.join(COLUMNS)} FROM facts WHERE {clause} LIMIT 25",
-            [f"%{word.lower()}%" for word in key_words]).fetchall()
+            params).fetchall()
         return [dict(zip(COLUMNS, row)) for row in rows]

@@ -34,6 +34,12 @@ export default function AuditView() {
 
       {error && <div className="error">{error}</div>}
 
+      {verdict && verdict.routed && verdict.routed.length > 0 && (
+        <div className="seeded">
+          routed to: {verdict.routed.join("  ·  ")}
+        </div>
+      )}
+
       {verdict && (
         <>
           <div className={"stamp " + verdict.status}>
