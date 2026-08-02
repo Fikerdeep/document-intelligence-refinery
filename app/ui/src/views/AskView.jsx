@@ -67,6 +67,12 @@ export default function AskView({ doc, seeded, onRun }) {
 
       {error && <div className="error">{error}</div>}
 
+      {result && result.routed && result.routed.length > 0 && (
+        <div className="seeded">
+          routed to: {result.routed.join("  ·  ")}
+        </div>
+      )}
+
       {result && result.status === "no_convergence" && (
         <div className="answer notfound">
           <div className="text">

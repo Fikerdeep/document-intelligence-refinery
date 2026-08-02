@@ -81,8 +81,22 @@ def main() -> int:
     facts = open_facts()
     system = None
     if args.doc_id == "all":
+        from refinery.models.card import DocumentCard
+        from refinery.pageindex.route import route
+
+        cards = [DocumentCard.model_validate(body) for body in
+                 (ARTIFACTS.get("cards", i) for i in ARTIFACTS.ids("cards"))
+                 if body]
+        ranked = route(args.question, cards,
+                       k=rules.routing.route_top_k) if cards else []
+        chosen = {doc_id for doc_id, score in ranked if score > 0}
+        if chosen:
+            names = {card.doc_id: card.source_name for card in cards}
+            print("routed:", " | ".join(names[d] for d, s in ranked if s > 0))
         trees, inspectors = [], {}
         for doc_id in ARTIFACTS.ids("pageindex"):
+            if chosen and doc_id not in chosen:
+                continue
             tree = PageIndexNode.model_validate(ARTIFACTS.get("pageindex", doc_id))
             card = ARTIFACTS.get("cards", doc_id)
             if card and card.get("summary"):
@@ -91,7 +105,10 @@ def main() -> int:
             inspector = build_inspector(doc_id, rules)
             if inspector:
                 inspectors[doc_id] = inspector
-        tools = make_corpus_tools(trees, store, facts, inspectors)
+        tools = make_corpus_tools(
+            trees, store, facts, inspectors,
+            doc_ids=sorted(chosen) if chosen else None,
+            documents=[tree.title for tree in trees] if chosen else None)
         system = CORPUS_SYSTEM
     else:
         body = ARTIFACTS.get("pageindex", args.doc_id)

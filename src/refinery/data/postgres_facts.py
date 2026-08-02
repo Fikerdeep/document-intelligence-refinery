@@ -67,6 +67,11 @@ class PostgresFactTable:
         """Run one SELECT over a snapshot holding only ``document``."""
         return run_select(self._snapshot("document = %s", (document,)), sql)
 
+    def scoped_query_any(self, sql: str, documents: list[str]) -> list[dict]:
+        """Run one SELECT over a snapshot holding only ``documents``."""
+        return run_select(
+            self._snapshot("document = ANY(%s)", (documents,)), sql)
+
     def rows_for(self, document: str, limit: int = 1000) -> list[dict]:
         """A document's facts for display: key, period, values, context, page."""
         rows = self._conn.execute(

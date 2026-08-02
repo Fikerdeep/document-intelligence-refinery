@@ -210,6 +210,20 @@ class FactTable:
                 (document,)).fetchall())
         return run_select(scoped, sql)
 
+    def scoped_query_any(self, sql: str, documents: list[str]) -> list[dict]:
+        """Run one SELECT against a facts table holding only ``documents`` —
+        the routed-set form of ``scoped_query``, same no-parse doctrine."""
+        scoped = sqlite3.connect(":memory:")
+        scoped.execute(SCHEMA)
+        marks = ",".join("?" for _ in documents)
+        scoped.executemany(
+            f"INSERT INTO facts ({', '.join(COLUMNS)}) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            self._conn.execute(
+                f"SELECT {', '.join(COLUMNS)} FROM facts "
+                f"WHERE document IN ({marks})", documents).fetchall())
+        return run_select(scoped, sql)
+
     def rows_for(self, document: str, limit: int = 1000) -> list[dict]:
         """A document's facts for display: key, period, values, context, page."""
         cursor = self._conn.execute(

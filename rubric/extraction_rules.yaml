@@ -57,6 +57,13 @@ routing:
   # is the only structured reading.
   table_overlap_ratio: 0.5
 
+  # corpus routing: a question binds to the top-k card-scored documents
+  # before the agent starts; search and SQL are physically scoped to them.
+  # Design constant pending the route-then-bind measurement — the corpus
+  # baseline it must beat is 3/15 grounded-correct, at $0.1057/answerable
+  # run average ($0.2206 worst question) and $0.3254/adversarial run.
+  route_top_k: 3
+
 coverage:
   # tau: escalate when coverage < tau. RE-DERIVED 2026-07-30 after M3's figure-claiming
   # (history: provisional 0.55 while the proxy counted figure ink as unexplained).

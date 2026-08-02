@@ -20,8 +20,8 @@ import uuid
 from pathlib import Path
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import (Distance, FieldCondition, Filter, MatchValue,
-                                  PointStruct, VectorParams)
+from qdrant_client.models import (Distance, FieldCondition, Filter, MatchAny,
+                                  MatchValue, PointStruct, VectorParams)
 
 from refinery.models.ldu import LDU
 from refinery.retrieval.embedder import Embedder
@@ -80,8 +80,10 @@ class VectorStore:
         return len(points)
 
     def search(self, query: str, k: int = 6, section: str | None = None,
-               doc_id: str | None = None) -> list[dict]:
-        """Nearest chunks, optionally scoped to one section subtree or document."""
+               doc_id: str | None = None,
+               doc_ids: list[str] | None = None) -> list[dict]:
+        """Nearest chunks, scoped to a section subtree, one document, or a
+        routed set of documents."""
         conditions = []
         if section:
             conditions.append(FieldCondition(key="section_ancestors",
@@ -89,6 +91,9 @@ class VectorStore:
         if doc_id:
             conditions.append(FieldCondition(key="doc_id",
                                              match=MatchValue(value=doc_id)))
+        elif doc_ids:
+            conditions.append(FieldCondition(key="doc_id",
+                                             match=MatchAny(any=doc_ids)))
         hits = self._client.query_points(
             COLLECTION, query=self._embedder.embed([query])[0], limit=k,
             query_filter=Filter(must=conditions) if conditions else None).points

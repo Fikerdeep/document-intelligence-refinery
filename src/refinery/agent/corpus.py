@@ -47,8 +47,14 @@ def build_corpus_tree(trees: list[PageIndexNode]) -> PageIndexNode:
 def make_corpus_tools(trees: list[PageIndexNode], store: VectorStore,
                       facts: FactTable,
                       inspectors: dict[str, FigureInspector] | None = None,
+                      doc_ids: list[str] | None = None,
+                      documents: list[str] | None = None,
                       ) -> dict[str, Callable[..., dict]]:
-    """Bind the four tools to the whole corpus instead of one document.
+    """Bind the four tools to the whole corpus, or to a routed subset of it.
+
+    When ``doc_ids``/``documents`` name a routed set, search and SQL are
+    physically scoped to it — a citation outside the set becomes impossible
+    by construction, the same guarantee single-document binding gives.
 
     ``inspectors`` maps doc_id to that document's FigureInspector; a figure
     hash is routed to whichever inspector owns it, so charts stay inspectable
@@ -68,7 +74,8 @@ def make_corpus_tools(trees: list[PageIndexNode], store: VectorStore,
                              for child in node.child_sections]}
 
     def semantic_search(query: str, section: str = "") -> dict:
-        hits = store.search(query, k=6, section=section or None, doc_id=None)
+        hits = store.search(query, k=6, section=section or None,
+                            doc_id=None, doc_ids=doc_ids)
         return {"hits": [{"content": hit["content"][:400],
                           "content_hash": hit["content_hash"],
                           "document": hit["document"], "pages": hit["pages"],
@@ -77,7 +84,8 @@ def make_corpus_tools(trees: list[PageIndexNode], store: VectorStore,
 
     def structured_query(sql: str) -> dict:
         try:
-            rows = facts.query(sql)
+            rows = (facts.scoped_query_any(sql, documents) if documents
+                    else facts.query(sql))
         except Exception as err:
             return {"error": str(err)}
         result = {"rows": rows}

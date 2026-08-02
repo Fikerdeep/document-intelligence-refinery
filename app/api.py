@@ -208,9 +208,24 @@ def ask(request: AskRequest) -> dict:
             return None
 
     system = None
+    routed_names: list[str] = []
     if request.doc_id == "__all__":
+        from refinery.models.card import DocumentCard
+        from refinery.pageindex.route import route
+
+        cards = [DocumentCard.model_validate(body) for body in
+                 (ARTIFACTS.get("cards", i) for i in ARTIFACTS.ids("cards"))
+                 if body]
+        ranked = route(request.question, cards,
+                       k=rules.routing.route_top_k) if cards else []
+        chosen = {doc_id for doc_id, score in ranked if score > 0}
+        by_id = {card.doc_id: card for card in cards}
+        routed_names = [by_id[d].source_name for d, s in ranked
+                        if s > 0 and d in by_id]
         trees, inspectors = [], {}
         for doc_id in ARTIFACTS.ids("pageindex"):
+            if chosen and doc_id not in chosen:
+                continue
             tree = PageIndexNode.model_validate(ARTIFACTS.get("pageindex", doc_id))
             card = ARTIFACTS.get("cards", doc_id)
             if card and card.get("summary"):
@@ -219,7 +234,10 @@ def ask(request: AskRequest) -> dict:
             inspector = inspector_for(doc_id, tree.title)
             if inspector:
                 inspectors[doc_id] = inspector
-        tools = make_corpus_tools(trees, store, facts, inspectors)
+        tools = make_corpus_tools(
+            trees, store, facts, inspectors,
+            doc_ids=sorted(chosen) if chosen else None,
+            documents=[tree.title for tree in trees] if chosen else None)
         system = CORPUS_SYSTEM
     else:
         body = ARTIFACTS.get("pageindex", request.doc_id)
@@ -234,13 +252,15 @@ def ask(request: AskRequest) -> dict:
         result = run_agent(request.question, build_chat(rules), tools, system=system)
     except GraphRecursionError:
         return {"answer": "", "status": "no_convergence", "tool_trace": [],
-                "tool_log": [], "citations": [], "doc_id": request.doc_id}
+                "tool_log": [], "routed": routed_names, "citations": [],
+                "doc_id": request.doc_id}
     doc_ids = {}
     for doc_id in ARTIFACTS.ids("profiles"):
         profile = ARTIFACTS.get("profiles", doc_id)
         doc_ids[profile["source_name"]] = profile["doc_id"]
     return {"answer": result.answer, "status": result.status,
             "tool_trace": result.tool_trace, "tool_log": result.tool_log,
+            "routed": routed_names,
             "citations": [{"document": c.document, "page": c.page,
                            "content_hash": c.content_hash,
                            "doc_id": doc_ids.get(c.document, request.doc_id),

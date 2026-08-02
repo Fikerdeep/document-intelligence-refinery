@@ -49,6 +49,7 @@ class RoutingRules(BaseModel):
 
     start_rung: dict[str, str]
     table_overlap_ratio: float = 0.5
+    route_top_k: int = 3
 
 
 class CoverageRules(BaseModel):
