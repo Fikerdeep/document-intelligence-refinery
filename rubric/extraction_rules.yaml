@@ -93,6 +93,17 @@ writeoffs:
 budget:
   max_vlm_usd_per_doc: 0.50
   vlm_crop_dpi: 200
+  # agent tool-loop cap; the wrap-up nudge fires one round earlier. MEASURED
+  # 2026-08-02 on the 9 tuning questions, one run each, sealed contract:
+  #   cap 12 — 5/5 correct + citation-verified, 4/4 not_found with zero
+  #            citations, mean 5.3 calls, honest max 8 (an adversarial decline)
+  #   cap 9  — 5/5 + 4/4 likewise, mean 5.1, max 7, zero truncation
+  # 9 leaves headroom above the honest max: the single-document 120.7bn
+  # question, whose receipt lands on call 8, went 11 calls/37s at cap 12 to
+  # 8 calls/23s at cap 9 with both citations intact. Cap 9 trims thrash tails
+  # only. Contract wording was measured alongside and discarded: the cap
+  # captured the gain.
+  max_tool_rounds: 9
 
 embeddings:
   # Anthropic has no embeddings model, so this stays a separate provider.

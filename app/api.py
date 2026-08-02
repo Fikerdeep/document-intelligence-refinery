@@ -261,7 +261,9 @@ def _execute_ask(request: AskRequest, wrap=None) -> dict:
     from langgraph.errors import GraphRecursionError
     started = time.perf_counter()
     try:
-        result = run_agent(request.question, build_chat(rules), tools, system=system)
+        result = run_agent(request.question, build_chat(rules), tools,
+                           max_tool_rounds=rules.budget.max_tool_rounds,
+                           system=system)
     except GraphRecursionError:
         return {"answer": "", "status": "no_convergence", "tool_trace": [],
                 "tool_log": [], "routed": routed_names, "citations": [],

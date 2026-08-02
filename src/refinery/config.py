@@ -61,10 +61,11 @@ class CoverageRules(BaseModel):
 
 
 class BudgetRules(BaseModel):
-    """Hard caps on paid extraction."""
+    """Hard caps on paid extraction and on the agent's tool loop."""
 
     max_vlm_usd_per_doc: float
     vlm_crop_dpi: int
+    max_tool_rounds: int = 12
 
 
 class EmbeddingRules(BaseModel):

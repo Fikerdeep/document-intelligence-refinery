@@ -117,7 +117,9 @@ def main() -> int:
         tools = make_tools(PageIndexNode.model_validate(body), store, facts,
                            args.doc_id, build_inspector(args.doc_id, rules))
 
-    result = run_agent(args.question, build_chat(rules), tools, system=system)
+    result = run_agent(args.question, build_chat(rules), tools,
+                       max_tool_rounds=rules.budget.max_tool_rounds,
+                       system=system)
     print(f"\n{result.answer}\n\nstatus: {result.status}")
     print("tools:", " -> ".join(result.tool_trace) or "none")
     if result.dropped_citations:
