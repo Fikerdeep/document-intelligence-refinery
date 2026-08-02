@@ -27,6 +27,8 @@ FIELD_WEIGHTS = (
     ("key_entities", 1.0),
     ("summary", 1.0),
     ("source_name", 2.0),
+    ("frequent_terms", 1.5),
+    ("opening", 1.0),
 )
 
 

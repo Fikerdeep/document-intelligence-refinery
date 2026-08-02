@@ -86,7 +86,8 @@ def main() -> int:
     ingested = store.ingest(profile.doc_id, args.pdf.name, ldus)
     facts = open_facts()
     fact_rows = facts.populate(extracted, args.pdf.name)
-    card = build_card(profile, tree, facts)
+    card = build_card(profile, tree, facts,
+                      [ldu.model_dump(mode="json") for ldu in ldus])
     artifacts.put("cards", profile.doc_id, card.model_dump(mode="json"))
     print(f"substrate: {ingested} chunks indexed, {fact_rows} fact rows")
     print(f"doc_id: {profile.doc_id}")

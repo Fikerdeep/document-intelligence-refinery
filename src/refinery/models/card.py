@@ -27,4 +27,6 @@ class DocumentCard(BaseModel):
     periods: list[str] = Field(default_factory=list)
     fact_keys: list[str] = Field(default_factory=list)
     table_contexts: list[str] = Field(default_factory=list)
+    opening: str = ""
+    frequent_terms: list[str] = Field(default_factory=list)
     summary: str

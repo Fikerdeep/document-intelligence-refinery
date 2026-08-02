@@ -34,7 +34,8 @@ def main() -> int:
             continue
         profile = DocumentProfile.model_validate(artifacts.get("profiles", doc_id))
         tree = PageIndexNode.model_validate(tree_body)
-        card = build_card(profile, tree, facts)
+        chunks = artifacts.get("chunks", doc_id) or []
+        card = build_card(profile, tree, facts, chunks)
         artifacts.put("cards", doc_id, card.model_dump(mode="json"))
         built += 1
         print(f"{card.source_name}: {card.summary[:90]}")

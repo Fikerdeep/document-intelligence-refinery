@@ -64,3 +64,21 @@ def test_card_without_facts_still_builds(tmp_path):
     card = build_card(profile, tree, facts)
     assert card.fact_keys == [] and card.periods == []
     assert card.summary.startswith("native digital financial document")
+
+
+def test_scan_card_gains_identity_from_text_chunks(tmp_path):
+    profile, tree, facts = _substrate(tmp_path)
+    profile = profile.model_copy(update={"source_name": "scan.pdf"})
+    chunks = [
+        {"chunk_type": "text",
+         "content": "DEVELOPMENT BANK OF ETHIOPIA\nAudit Report\n30 June 2023"},
+        {"chunk_type": "text",
+         "content": "The Development Bank financed agricultural projects. "
+                    "The Development Bank audit covers agricultural lending."},
+        {"chunk_type": "table", "content": "Column 2 | Column 3"},
+    ]
+    card = build_card(profile, tree, facts, chunks)
+    assert card.opening.startswith("DEVELOPMENT BANK OF ETHIOPIA")
+    assert "development" in card.frequent_terms
+    assert "bank" in card.frequent_terms
+    assert "opens: DEVELOPMENT BANK OF ETHIOPIA" in card.summary
