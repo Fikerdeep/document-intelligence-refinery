@@ -33,11 +33,11 @@ MULTIPLIER = {"bn": 1e9, "billion": 1e9, "m": 1e6, "million": 1e6,
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS facts (
     key TEXT, period TEXT, value_raw TEXT, value_num REAL, unit TEXT,
-    document TEXT, page INTEGER, x0 REAL, y0 REAL, x1 REAL, y1 REAL,
-    content_hash TEXT)"""
+    context TEXT, document TEXT, page INTEGER, x0 REAL, y0 REAL, x1 REAL,
+    y1 REAL, content_hash TEXT)"""
 
-COLUMNS = ("key", "period", "value_raw", "value_num", "unit", "document",
-           "page", "x0", "y0", "x1", "y1", "content_hash")
+COLUMNS = ("key", "period", "value_raw", "value_num", "unit", "context",
+           "document", "page", "x0", "y0", "x1", "y1", "content_hash")
 
 
 def run_select(conn: sqlite3.Connection, sql: str) -> list[dict]:
@@ -47,6 +47,32 @@ def run_select(conn: sqlite3.Connection, sql: str) -> list[dict]:
     cursor = conn.execute(sql)
     names = [column[0] for column in cursor.description]
     return [dict(zip(names, row)) for row in cursor.fetchmany(50)]
+
+
+CAPTION_PROXIMITY_PT = 72.0
+CAPTION_TEXT = re.compile(r"^table\s*\d+\b", re.IGNORECASE)
+
+
+def _table_context(element, texts_by_page: dict) -> str | None:
+    """The caption naming WHICH table a bare key belongs to, from the
+    cheapest source that has it: text the normalizer defused out of the
+    cells, the caption the extractor attached to the element, or the
+    nearest caption-shaped text block within CAPTION_PROXIMITY_PT."""
+    if element.table.context:
+        return element.table.context
+    if element.caption:
+        return " ".join(element.caption.split())[:300]
+    best, best_gap = None, CAPTION_PROXIMITY_PT + 1.0
+    for text in texts_by_page.get(element.bbox.page, []):
+        if not CAPTION_TEXT.match(text.text.strip()):
+            continue
+        gap = min(abs(element.bbox.y0 - text.bbox.y1),
+                  abs(text.bbox.y0 - element.bbox.y1))
+        if gap < best_gap:
+            best, best_gap = text, gap
+    if best is None:
+        return None
+    return " ".join(best.text.split())[:300]
 
 
 def build_facts(extracted: ExtractedDocument,
@@ -61,10 +87,15 @@ def build_facts(extracted: ExtractedDocument,
     facts = []
     seen: set[tuple[str, str, str, str]] = set()
     skipped = 0
+    texts_by_page: dict[int, list] = {}
+    for element in extracted.elements:
+        if element.kind is ElementKind.TEXT and (element.text or "").strip():
+            texts_by_page.setdefault(element.bbox.page, []).append(element)
     for element in extracted.elements:
         if element.kind is not ElementKind.TABLE or len(element.table.headers) < 2:
             continue
         table = element.table
+        context = _table_context(element, texts_by_page)
         period_major = is_period_major(table.headers, table.rows)
         row_periods = table.row_periods or []
         for index, record in enumerate(table.rows):
@@ -93,6 +124,7 @@ def build_facts(extracted: ExtractedDocument,
                 facts.append(FactRow(
                     key=key, period=period or None,
                     value_raw=value_raw, value_num=value_num, unit=unit,
+                    context=context,
                     document=source_name, page=element.bbox.page,
                     bbox=element.bbox,
                     content_hash=content_hash(
@@ -131,6 +163,9 @@ class FactTable:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(path)
         self._conn.execute(SCHEMA)
+        held = {row[1] for row in self._conn.execute("PRAGMA table_info(facts)")}
+        if "context" not in held:
+            self._conn.execute("ALTER TABLE facts ADD COLUMN context TEXT")
         self.duplicates_skipped = 0
 
     def populate(self, extracted: ExtractedDocument, source_name: str) -> int:
@@ -144,10 +179,11 @@ class FactTable:
         facts, self.duplicates_skipped = build_facts(extracted, source_name)
         self._conn.execute("DELETE FROM facts WHERE document = ?", (source_name,))
         self._conn.executemany(
-            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            [(f.key, f.period, f.value_raw, f.value_num, f.unit, f.document, f.page,
-              f.bbox.x0, f.bbox.y0, f.bbox.x1, f.bbox.y1, f.content_hash)
-             for f in facts])
+            f"INSERT INTO facts ({', '.join(COLUMNS)}) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(f.key, f.period, f.value_raw, f.value_num, f.unit, f.context,
+              f.document, f.page, f.bbox.x0, f.bbox.y0, f.bbox.x1, f.bbox.y1,
+              f.content_hash) for f in facts])
         self._conn.commit()
         return len(facts)
 
@@ -167,9 +203,11 @@ class FactTable:
         scoped = sqlite3.connect(":memory:")
         scoped.execute(SCHEMA)
         scoped.executemany(
-            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            self._conn.execute("SELECT * FROM facts WHERE document = ?",
-                               (document,)).fetchall())
+            f"INSERT INTO facts ({', '.join(COLUMNS)}) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            self._conn.execute(
+                f"SELECT {', '.join(COLUMNS)} FROM facts WHERE document = ?",
+                (document,)).fetchall())
         return run_select(scoped, sql)
 
     def rows_for(self, document: str, limit: int = 1000) -> list[dict]:

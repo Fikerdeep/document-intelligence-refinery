@@ -40,14 +40,67 @@ def _is_period_token(cell: str) -> bool:
     return bool(PERIOD_TOKEN.match(cell.strip()))
 
 
+CAPTION = re.compile(r"^table\s*\d+\s*:", re.IGNORECASE)
+
+
+def _defuse(rows: list[list[str]]) -> tuple[list[list[str]], str | None]:
+    """Free cell values from caption text fused in by the grid detector.
+
+    A caption printed across a table region arrives sliced into the cells
+    as extra lines, broken mid-word at column boundaries. A cell is defused
+    only on positive evidence of fusion — it holds a value line (extra text
+    cannot belong to a number) or a line bearing a caption signature — so a
+    label merely wrapped across lines inside its own cell stays whole. The
+    freed fragments concatenate without separators, rejoining mid-word
+    slices exactly, into the table's context string.
+    """
+    fragments: list[str] = []
+    defused = []
+    for row in rows:
+        out = []
+        for cell in row:
+            lines = [line.strip() for line in cell.split("\n") if line.strip()]
+            if len(lines) < 2:
+                out.append(cell)
+                continue
+            values = [line for line in lines if _is_value(line)]
+            if values:
+                out.append(values[0])
+                taken = False
+                for line in lines:
+                    if line == values[0] and not taken:
+                        taken = True
+                        continue
+                    fragments.append(line)
+                continue
+            marked = next((i for i, line in enumerate(lines)
+                           if CAPTION.match(line)), None)
+            if marked is None:
+                out.append(cell)
+                continue
+            out.append(" ".join(lines[:marked]))
+            fragments.extend(lines[marked:])
+        defused.append(out)
+    context = _clean("".join(fragments))[:300] or None
+    return defused, context
+
+
 def normalize(table: Table) -> Table:
-    """Return the repaired table; clean tables come back unchanged in shape."""
+    """Return the repaired table; clean tables come back unchanged in shape.
+
+    Idempotent by construction: an already-normalized table has no fused
+    lines to free and sits below the padding gate, so it passes through
+    with its ``row_periods`` and ``context`` preserved.
+    """
     headers = [_clean(header) for header in table.headers]
-    rows = [[_clean(cell) for cell in row] for row in table.rows]
+    defused, context = _defuse(table.rows)
+    context = context or table.context
+    rows = [[_clean(cell) for cell in row] for row in defused]
     cells = [cell for row in rows for cell in row]
     padding = sum(1 for cell in cells if not cell) / len(cells) if cells else 0.0
     if padding <= PADDING_GATE:
-        return Table(headers=headers, rows=rows)
+        return Table(headers=headers, rows=rows,
+                     row_periods=table.row_periods, context=context)
 
     measures = [header for header in headers if header]
     packed: list[list[str]] = []
@@ -76,4 +129,5 @@ def normalize(table: Table) -> Table:
     headers_out = ["", *measures] + [""] * (width - len(measures) - 1)
     rows_out = [row + [""] * (width - len(row)) for row in packed]
     return Table(headers=headers_out, rows=rows_out,
-                 row_periods=periods if any(periods) else None)
+                 row_periods=periods if any(periods) else None,
+                 context=context)

@@ -16,6 +16,7 @@ from typing import Protocol
 import fitz
 
 from refinery.config import VisionRules
+from refinery.extraction.table_normalizer import normalize
 from refinery.models.bbox import BBox
 from refinery.models.extracted import Element, ElementKind, Table
 from refinery.models.profile import Rung
@@ -135,7 +136,8 @@ def elements_from_payload(payload: dict, region: BBox) -> list[Element]:
             if headers and all(len(row) == len(headers) for row in rows):
                 elements.append(Element(kind=ElementKind.TABLE, bbox=region,
                                         source_rung=Rung.VISION,
-                                        table=Table(headers=headers, rows=rows),
+                                        table=normalize(Table(headers=headers,
+                                                              rows=rows)),
                                         caption=raw.get("caption")))
         elif kind == "figure":
             elements.append(Element(kind=ElementKind.FIGURE, bbox=region,

@@ -13,13 +13,20 @@ from refinery.models.bbox import BBox
 
 
 class FactRow(BaseModel):
-    """One key-value fact with full provenance."""
+    """One key-value fact with full provenance.
+
+    ``context`` carries the table's own caption when one was recovered — the
+    text that says WHICH measure a bare key like "Non-Food" belongs to. It
+    is metadata, not identity: two facts differing only in context are the
+    same fact, so context stays out of the content hash.
+    """
 
     key: str
     value_raw: str
     value_num: float | None = None
     unit: str | None = None
     period: str | None = None
+    context: str | None = None
     document: str
     page: int
     bbox: BBox

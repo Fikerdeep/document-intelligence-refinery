@@ -18,9 +18,9 @@ from refinery.models.extracted import ExtractedDocument
 PG_SCHEMA = (
     "CREATE TABLE IF NOT EXISTS facts ("
     "key TEXT, period TEXT, value_raw TEXT, value_num DOUBLE PRECISION, "
-    "unit TEXT, document TEXT, page INTEGER, x0 DOUBLE PRECISION, "
-    "y0 DOUBLE PRECISION, x1 DOUBLE PRECISION, y1 DOUBLE PRECISION, "
-    "content_hash TEXT)")
+    "unit TEXT, context TEXT, document TEXT, page INTEGER, "
+    "x0 DOUBLE PRECISION, y0 DOUBLE PRECISION, x1 DOUBLE PRECISION, "
+    "y1 DOUBLE PRECISION, content_hash TEXT)")
 
 
 class PostgresFactTable:
@@ -31,6 +31,8 @@ class PostgresFactTable:
 
         self._conn = psycopg.connect(dsn, autocommit=True)
         self._conn.execute(PG_SCHEMA)
+        self._conn.execute(
+            "ALTER TABLE facts ADD COLUMN IF NOT EXISTS context TEXT")
         self.duplicates_skipped = 0
 
     def populate(self, extracted: ExtractedDocument, source_name: str) -> int:
@@ -39,9 +41,10 @@ class PostgresFactTable:
         self._conn.execute("DELETE FROM facts WHERE document = %s", (source_name,))
         with self._conn.cursor() as cursor:
             cursor.executemany(
-                "INSERT INTO facts VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                [(f.key, f.period, f.value_raw, f.value_num, f.unit, f.document,
-                  f.page, f.bbox.x0, f.bbox.y0, f.bbox.x1, f.bbox.y1,
+                f"INSERT INTO facts ({', '.join(COLUMNS)}) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                [(f.key, f.period, f.value_raw, f.value_num, f.unit, f.context,
+                  f.document, f.page, f.bbox.x0, f.bbox.y0, f.bbox.x1, f.bbox.y1,
                   f.content_hash) for f in facts])
         return len(facts)
 
@@ -52,7 +55,8 @@ class PostgresFactTable:
         memory = sqlite3.connect(":memory:")
         memory.execute(SCHEMA)
         memory.executemany(
-            "INSERT INTO facts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+            f"INSERT INTO facts ({', '.join(COLUMNS)}) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         return memory
 
     def query(self, sql: str) -> list[dict]:

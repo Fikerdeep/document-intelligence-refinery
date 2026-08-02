@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from refinery.extraction.table_normalizer import normalize
 from refinery.identity import doc_id
 from refinery.models.bbox import BBox, from_pdf_native
 from refinery.models.extracted import Element, ElementKind, ExtractedDocument, Table
@@ -41,7 +42,7 @@ def _table_model(item) -> Table | None:
     rows = [[cell.text or "" for cell in row] for row in grid[1:]]
     if any(len(row) != len(headers) for row in rows):
         return None
-    return Table(headers=headers, rows=rows)
+    return normalize(Table(headers=headers, rows=rows))
 
 
 def _caption(item, document) -> str | None:

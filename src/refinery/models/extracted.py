@@ -28,12 +28,14 @@ class Table(BaseModel):
 
     ``row_periods`` carries block periods — a fiscal year printed once per
     group of rows and forward-filled by the normalizer — one entry per row,
-    None where no block marker governs.
+    None where no block marker governs. ``context`` carries the table's own
+    caption when the normalizer recovered one from fused cells.
     """
 
     headers: list[str]
     rows: list[list[str]]
     row_periods: list[str | None] | None = None
+    context: str | None = None
 
     @model_validator(mode="after")
     def _rectangular(self) -> "Table":

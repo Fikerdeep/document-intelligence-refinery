@@ -32,12 +32,15 @@ TOOL_SPECS = [
          "required": ["query"]}},
     {"name": "structured_query",
      "description": "SQL SELECT over the facts table "
-                    "(key, period, value_raw, value_num, unit, document, page, "
-                    "content_hash, x0, y0, x1, y1). Use for exact numbers, "
+                    "(key, period, value_raw, value_num, unit, context, document, "
+                    "page, content_hash, x0, y0, x1, y1). Use for exact numbers, "
                     "comparisons, and aggregates. Use SELECT * unless you have a "
                     "reason not to: rows are citable only when they carry "
                     "content_hash, document, page and the bbox columns, and an "
-                    "answer cannot be built from uncitable rows.",
+                    "answer cannot be built from uncitable rows. The context "
+                    "column holds the source table's caption — when a question "
+                    "names a measure variant (year-on-year vs moving average), "
+                    "filter with context LIKE to pick the right table.",
      "parameters": {"type": "object", "properties": {
          "sql": {"type": "string"}}, "required": ["sql"]}},
     {"name": "inspect_figure",

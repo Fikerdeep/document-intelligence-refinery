@@ -63,6 +63,34 @@ def test_clean_table_passes_through_unchanged():
     assert fixed.headers == clean.headers
     assert fixed.rows == clean.rows
     assert fixed.row_periods is None
+    assert fixed.context is None
+
+
+def test_fused_caption_is_defused_into_context():
+    fused = Table(
+        headers=["Month/Year", "General", "Food", "Non-Food", ""],
+        rows=[
+            ["July EFY2009 - July EFY2010", "14.4", "13.4", "15.9", ""],
+            ["July EFY 2010 - JulyEFY2011\nTable 1: General, Food and Non-Fo",
+             "", "", "", ""],
+            ["", "12.6\nod Inflation Rate (%, Ye", "13.1\nar-on-Year) July EFY20",
+             "11.9\n16 - July EFY201 7", ""],
+            ["July-EFY 2017", "13.7", "12.1", "16.1", ""],
+        ])
+    fixed = normalize(fused)
+    assert "Year-on-Year" in fixed.context
+    assert "Non-Food Inflation" in fixed.context
+    flat = [cell for row in fixed.rows for cell in row]
+    assert "12.6" in flat and "13.1" in flat and "11.9" in flat
+
+
+def test_normalize_is_idempotent():
+    for fixture in (TABLE_41, TABLE_44):
+        once = normalize(fixture)
+        twice = normalize(once)
+        assert twice.headers == once.headers
+        assert twice.rows == once.rows
+        assert twice.row_periods == once.row_periods
 
 
 def test_populate_uses_block_periods(tmp_path):

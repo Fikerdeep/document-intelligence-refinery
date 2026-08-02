@@ -39,6 +39,45 @@ def test_sqlite_backend_honours_the_contract(tmp_path):
     facts_contract(FactTable(tmp_path / "facts.db"))
 
 
+def test_element_caption_becomes_context(tmp_path):
+    doc = document_with("4,200", "a")
+    doc.elements[0].caption = "Table 3: Revenue by year (Year-on-Year)"
+    facts = FactTable(tmp_path / "facts.db")
+    facts.populate(doc, "a.pdf")
+    rows = facts.query("SELECT context FROM facts")
+    assert rows[0]["context"] == "Table 3: Revenue by year (Year-on-Year)"
+
+
+def test_nearby_caption_text_becomes_context(tmp_path):
+    doc = document_with("4,200", "a")
+    doc.elements.append(Element(
+        kind=ElementKind.TEXT, source_rung=Rung.FAST_TEXT,
+        bbox=BBox(x0=72, y0=170, x1=500, y1=190, page=4),
+        text="Table 7: Quarterly revenue (12-month moving average)"))
+    doc.reading_order.append(1)
+    facts = FactTable(tmp_path / "facts.db")
+    facts.populate(doc, "a.pdf")
+    rows = facts.query("SELECT context FROM facts")
+    assert "moving average" in rows[0]["context"]
+
+
+def test_distant_or_plain_text_is_not_context(tmp_path):
+    doc = document_with("4,200", "a")
+    doc.elements.append(Element(
+        kind=ElementKind.TEXT, source_rung=Rung.FAST_TEXT,
+        bbox=BBox(x0=72, y0=20, x1=500, y1=40, page=4),
+        text="Table 7: too far away to belong to this table"))
+    doc.elements.append(Element(
+        kind=ElementKind.TEXT, source_rung=Rung.FAST_TEXT,
+        bbox=BBox(x0=72, y0=170, x1=500, y1=190, page=4),
+        text="ordinary prose right above the table"))
+    doc.reading_order.extend([1, 2])
+    facts = FactTable(tmp_path / "facts.db")
+    facts.populate(doc, "a.pdf")
+    rows = facts.query("SELECT context FROM facts")
+    assert rows[0]["context"] is None
+
+
 def test_open_facts_defaults_to_sqlite(tmp_path, monkeypatch):
     monkeypatch.delenv("REFINERY_DB_URL", raising=False)
     assert isinstance(open_facts(tmp_path / "facts.db"), FactTable)
