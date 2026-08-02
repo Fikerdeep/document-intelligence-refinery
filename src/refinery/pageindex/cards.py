@@ -39,8 +39,15 @@ def _ranked(values: list[str], limit: int = LIST_LIMIT) -> list[str]:
 
 
 def _opening(chunks: list[dict]) -> str:
+    """The document's first prose-bearing chunk, whatever rung produced it.
+
+    A scanned cover arrives as a figure chunk whose vision description names
+    the institution, so figure prose counts as identity alongside text.
+    Tables stay excluded: cell debris is not prose.
+    """
     for chunk in chunks:
-        if chunk.get("chunk_type") == "text" and (chunk.get("content") or "").strip():
+        if (chunk.get("chunk_type") in ("text", "figure")
+                and (chunk.get("content") or "").strip()):
             return " ".join(chunk["content"].split())[:OPENING_CHARS]
     return ""
 

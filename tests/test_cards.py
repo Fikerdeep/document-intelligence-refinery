@@ -82,3 +82,26 @@ def test_scan_card_gains_identity_from_text_chunks(tmp_path):
     assert "development" in card.frequent_terms
     assert "bank" in card.frequent_terms
     assert "opens: DEVELOPMENT BANK OF ETHIOPIA" in card.summary
+
+
+def test_figure_cover_description_becomes_the_opening(tmp_path):
+    profile, tree, facts = _substrate(tmp_path)
+    chunks = [
+        {"chunk_type": "table", "content": "Column 2 | Column 3"},
+        {"chunk_type": "figure",
+         "content": "Cover page of the Commercial Bank of Ethiopia "
+                    "Annual Report 2023/24 featuring the bank's logo"},
+        {"chunk_type": "text", "content": "2023 /"},
+    ]
+    card = build_card(profile, tree, facts, chunks)
+    assert card.opening.startswith("Cover page of the Commercial Bank of Ethiopia")
+
+
+def test_first_text_chunk_still_wins_over_a_later_figure(tmp_path):
+    profile, tree, facts = _substrate(tmp_path)
+    chunks = [
+        {"chunk_type": "text", "content": "GAO Financial Audit Report"},
+        {"chunk_type": "figure", "content": "Cover page with agency seal"},
+    ]
+    card = build_card(profile, tree, facts, chunks)
+    assert card.opening == "GAO Financial Audit Report"
