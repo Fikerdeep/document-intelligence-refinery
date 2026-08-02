@@ -7,7 +7,7 @@ from refinery.config import load_rules
 from refinery.extraction.fast_text import extract_page
 from refinery.extraction.router import Extractors, route_document
 from refinery.models.bbox import BBox
-from refinery.models.extracted import Element, ElementKind, ExtractedDocument
+from refinery.models.extracted import Element, ElementKind, ExtractedDocument, Table
 from refinery.models.profile import Rung
 from refinery.triage import profile_document
 
@@ -88,6 +88,33 @@ def test_failing_rung_a_climbs_to_b_and_stops_when_b_covers(tmp_path, rules):
         Extractors(fast_text=blind_a, layout=perfect_b, vision=vision))
     assert entries[0].strategy_used == "A→B"
     assert vision.calls == 0
+
+
+def test_rung_a_recovered_caption_survives_escalation(tmp_path, rules):
+    path = _make_native(tmp_path)
+
+    def fused_a(page, number):
+        return [Element(
+            kind=ElementKind.TABLE, source_rung=Rung.FAST_TEXT,
+            bbox=BBox(x0=50, y0=50, x1=550, y1=700, page=number),
+            table=Table(headers=["", ""], rows=[["", ""]],
+                        context="Table 1: Year-on-Year Inflation"))]
+
+    def clean_b(p):
+        page = fitz.open(path)[0]
+        elements = extract_page(page, 1) + [Element(
+            kind=ElementKind.TABLE, source_rung=Rung.LAYOUT,
+            bbox=BBox(x0=50, y0=50, x1=550, y1=700, page=1),
+            table=Table(headers=["Month", "General"], rows=[["July", "13.7"]]))]
+        return ExtractedDocument(doc_id="x", elements=elements, reading_order=[])
+
+    extracted, entries = route_document(
+        path, profile_document(path, rules), rules,
+        Extractors(fast_text=fused_a, layout=clean_b, vision=None))
+    tables = [el for el in extracted.elements if el.kind is ElementKind.TABLE
+              and el.source_rung is Rung.LAYOUT]
+    assert tables
+    assert tables[0].table.context == "Table 1: Year-on-Year Inflation"
 
 
 def test_budget_cap_stops_vision_and_is_recorded(tmp_path, rules):

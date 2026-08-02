@@ -6,6 +6,11 @@ unexplained goes to vision as region crops, never whole pages unless the
 page itself is the region. A budget cap stops paid calls; anything left
 unexplained is recorded honestly, never hidden. Every page ends with a
 ledger entry telling the full story.
+
+Escalation replaces a rung's elements, never its recoveries: a table
+caption rung A defused out of a malformed grid is carried onto the
+replacing rung's context-less tables, because information recovered by
+the cheapest rung must survive the climb.
 """
 
 from __future__ import annotations
@@ -117,11 +122,15 @@ def route_document(path: Path | str, profile: DocumentProfile, rules: Rules,
         steps: list[str] = []
         elements: list[Element] = []
         regions: list[BBox] = []
+        salvaged: str | None = None
         result = _assess(page, elements, number, rules, ink)
 
         if rung is Rung.FAST_TEXT:
             elements = extractors.fast_text(page, number)
             steps.append("A")
+            salvaged = next((el.table.context for el in elements
+                             if el.kind is ElementKind.TABLE and el.table
+                             and el.table.context), None)
             result = _assess(page, elements, number, rules, ink)
             if result.escalate or _insane_table_boxes(elements):
                 rung = Rung.LAYOUT
@@ -147,6 +156,14 @@ def route_document(path: Path | str, profile: DocumentProfile, rules: Rules,
             elements = elements + gained
             steps.append(step)
             result = _assess(page, elements, number, rules, ink)
+
+        if salvaged:
+            elements = [
+                el.model_copy(update={"table": el.table.model_copy(
+                    update={"context": salvaged})})
+                if el.kind is ElementKind.TABLE and el.table
+                and not el.table.context else el
+                for el in elements]
 
         all_elements.extend(elements)
         entries.append(LedgerEntry(

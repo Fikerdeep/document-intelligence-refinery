@@ -38,9 +38,11 @@ TOOL_SPECS = [
                     "reason not to: rows are citable only when they carry "
                     "content_hash, document, page and the bbox columns, and an "
                     "answer cannot be built from uncitable rows. The context "
-                    "column holds the source table's caption — when a question "
-                    "names a measure variant (year-on-year vs moving average), "
-                    "filter with context LIKE to pick the right table.",
+                    "column holds the source table's caption when one was "
+                    "recovered, else NULL — when a question names a measure "
+                    "variant (year-on-year vs moving average), try one filter "
+                    "with context LIKE; if it returns nothing, drop the context "
+                    "clause immediately and disambiguate by key instead.",
      "parameters": {"type": "object", "properties": {
          "sql": {"type": "string"}}, "required": ["sql"]}},
     {"name": "inspect_figure",
