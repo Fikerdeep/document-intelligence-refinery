@@ -43,9 +43,12 @@ class TriageRules(BaseModel):
 
 
 class RoutingRules(BaseModel):
-    """Which extraction rung each origin type starts at."""
+    """Which extraction rung each origin type starts at, and how rung
+    overlap resolves: a vision table overlapping a sane deterministic table
+    by at least ``table_overlap_ratio`` of the smaller box stays out."""
 
     start_rung: dict[str, str]
+    table_overlap_ratio: float = 0.5
 
 
 class CoverageRules(BaseModel):

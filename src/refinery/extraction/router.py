@@ -66,6 +66,29 @@ def _insane_table_boxes(elements: list[Element]) -> list[BBox]:
             if el.kind is ElementKind.TABLE and not is_sane(el.table)]
 
 
+def _overlap_ratio(a: BBox, b: BBox) -> float:
+    x0, y0 = max(a.x0, b.x0), max(a.y0, b.y0)
+    x1, y1 = min(a.x1, b.x1), min(a.y1, b.y1)
+    if x1 <= x0 or y1 <= y0:
+        return 0.0
+    smaller = min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0))
+    return (x1 - x0) * (y1 - y0) / smaller if smaller > 0 else 0.0
+
+
+def _without_duplicate_tables(gained: list[Element], held: list[Element],
+                              ratio: float) -> list[Element]:
+    """Vision tables that substantially overlap a sane deterministic table
+    are dropped before the merge. Vision reads regions the spine could not;
+    it does not out-vote a reproducible reading with a probabilistic one —
+    the measured twins disagree in value and vary between identical runs.
+    """
+    sane = [el for el in held if el.kind is ElementKind.TABLE and el.table
+            and is_sane(el.table)]
+    return [el for el in gained
+            if not (el.kind is ElementKind.TABLE and any(
+                _overlap_ratio(el.bbox, other.bbox) >= ratio for other in sane))]
+
+
 def _assess(page: fitz.Page, elements: list[Element], number: int,
             rules: Rules, ink) -> CoverageResult:
     return assess(ink, elements, page.rect.width, page.rect.height, number, rules)
@@ -153,6 +176,8 @@ def route_document(path: Path | str, profile: DocumentProfile, rules: Rules,
         if regions:
             gained, page_cost, step = _run_vision(page, regions, extractors, rules, spent)
             spent += page_cost
+            gained = _without_duplicate_tables(gained, elements,
+                                               rules.routing.table_overlap_ratio)
             elements = elements + gained
             steps.append(step)
             result = _assess(page, elements, number, rules, ink)

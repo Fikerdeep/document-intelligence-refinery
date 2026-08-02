@@ -117,6 +117,28 @@ def test_rung_a_recovered_caption_survives_escalation(tmp_path, rules):
     assert tables[0].table.context == "Table 1: Year-on-Year Inflation"
 
 
+def test_vision_table_over_sane_table_is_dropped():
+    from refinery.extraction.router import _without_duplicate_tables
+
+    sane_b = Element(kind=ElementKind.TABLE, source_rung=Rung.LAYOUT,
+                     bbox=BBox(x0=50, y0=100, x1=550, y1=700, page=2),
+                     table=Table(headers=["Month", "General"],
+                                 rows=[["July", "13.7"]]))
+    twin = Element(kind=ElementKind.TABLE, source_rung=Rung.VISION,
+                   bbox=BBox(x0=55, y0=110, x1=545, y1=690, page=2),
+                   table=Table(headers=["Month", "General"],
+                               rows=[["July", "13.9"]]))
+    elsewhere = Element(kind=ElementKind.TABLE, source_rung=Rung.VISION,
+                        bbox=BBox(x0=50, y0=710, x1=550, y1=780, page=2),
+                        table=Table(headers=["A", "B"], rows=[["1", "2"]]))
+    prose = Element(kind=ElementKind.TEXT, source_rung=Rung.VISION,
+                    bbox=BBox(x0=55, y0=110, x1=545, y1=690, page=2),
+                    text="vision prose over the same region")
+    kept = _without_duplicate_tables([twin, elsewhere, prose], [sane_b], 0.5)
+    assert twin not in kept
+    assert elsewhere in kept and prose in kept
+
+
 def test_budget_cap_stops_vision_and_is_recorded(tmp_path, rules):
     scan = _make_scan(tmp_path, _make_native(tmp_path))
     broke = rules.model_copy(deep=True)

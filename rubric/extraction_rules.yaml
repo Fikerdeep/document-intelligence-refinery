@@ -47,6 +47,16 @@ routing:
                       # tau never referees pages that claim nothing
     form_fillable: B
 
+  # rung-overlap resolution: a vision table substantially overlapping a sane
+  # deterministic-rung table does not enter the merge. Evidence 2026-08-02, 12
+  # ingested docs: 34/242 fact pages held 2+ tables overlapping >=50% (16.8% of
+  # fact rows), 126 value-divergent twin groups; on CPI p.2 the copies overlap
+  # 98.2%, the vision twin's values are wrong AND non-deterministic across runs,
+  # while tax's genuinely-separate table pairs overlap 0.0%. Deterministic beats
+  # probabilistic when both claim one region; vision contributes only where it
+  # is the only structured reading.
+  table_overlap_ratio: 0.5
+
 coverage:
   # tau: escalate when coverage < tau. RE-DERIVED 2026-07-30 after M3's figure-claiming
   # (history: provisional 0.55 while the proxy counted figure ink as unexplained).
