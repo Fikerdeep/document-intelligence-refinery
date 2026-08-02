@@ -16,18 +16,9 @@ from pathlib import Path
 
 import fitz
 
+from refinery.agent.prompts import FIGURE_PROMPT
 from refinery.extraction.vision import VisionReader, crop_png
 from refinery.models.bbox import BBox
-
-FIGURE_PROMPT = (
-    "This image is a figure or chart cropped from a document page. Reply with JSON "
-    'only, shaped exactly as {"description": "...", "readings": ["..."]}. The '
-    "description is 2-3 sentences: what the figure shows, its axes or legend, and "
-    "the overall trend. Each reading is one estimated value stated with the ≈ "
-    "symbol, e.g. \"2019/20 Customs ≈ -1.2 ETB billion\". Read axis and legend "
-    "text exactly; estimate bar or point values honestly. If the image is not a "
-    "chart, describe what it is and return an empty readings list."
-)
 
 
 class FigureInspector:

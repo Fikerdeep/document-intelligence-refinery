@@ -14,23 +14,11 @@ from typing import Callable
 
 from refinery.agent.citations import citable
 from refinery.agent.figures import FigureInspector
-from refinery.agent.loop import CONTRACT
+from refinery.agent.prompts import CORPUS_SYSTEM
 from refinery.agent.tools import _find_node
 from refinery.data.fact_table import FactTable
 from refinery.models.pageindex import PageIndexNode
 from refinery.retrieval.vector_store import VectorStore
-
-CORPUS_SYSTEM = (
-    "You answer questions across a corpus of documents using ONLY your tools. The "
-    "page index root lists every document. Rules: navigate the root first; descend "
-    "into a document when the question names one, search across all when it does "
-    "not; use structured_query for any exact number, comparison, or aggregate — "
-    "rows carry a document column, always read it; for a chart or figure call "
-    "inspect_figure with its content_hash — figure readings are ESTIMATES, always "
-    "presented with 'about' or '≈'; never answer from prior knowledge. Name the "
-    "source document for every claim, and cite each distinct source — answers here "
-    "may span documents. " + CONTRACT
-)
 
 
 def build_corpus_tree(trees: list[PageIndexNode]) -> PageIndexNode:
