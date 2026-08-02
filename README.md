@@ -34,7 +34,8 @@ python scripts/ask.py <doc_id> "What was general inflation in July EFY 2017?"
 #  [1] Consumer Price Index July 2025.pdf p.2 bbox(47,133,572,718) hash 9f3a…
 
 python scripts/ask.py all "Which CPI report shows the highest food inflation?"
-#  corpus mode: one question across every ingested document
+#  routed: Consumer Price Index September 2025.pdf · Consumer Price Index August 2025.pdf …
+#  corpus mode: cards route the question, tools are bound to the routed documents
 
 python scripts/audit_claim.py "July EFY 2017 general inflation was 14.2" --corpus corpus/tune
 #  REFUTED: claimed 14.2, but the document prints 13.7
@@ -57,8 +58,14 @@ The agent's four tools: `pageindex_navigate` (walk the document tree),
 `semantic_search` (section-scoped retrieval), `structured_query` (SQL over extracted
 facts), and `inspect_figure` (look at a chart at question time — readings are
 estimates by contract and never enter the fact table). The agent binds to one
-document by default; an explicit corpus mode asks across every ingested document,
-with every claim still named to its source.
+document by default. Corpus mode routes the question first: every document gets a
+deterministic card (built from its profile, tree, facts, and chunks — no model
+call), the question is scored against every card by IDF-weighted token overlap,
+and retrieval and SQL are then *physically* bound to the routed documents — an
+out-of-set citation is impossible, not just discouraged. Audit Mode routes the
+same way, then walks the routed documents in ranked order: the best-ranked
+document whose facts speak to the claim renders the verdict, so a value
+coincidentally printed elsewhere cannot supply the receipt.
 
 The reliability mechanisms, each testable alone:
 
@@ -74,6 +81,17 @@ The reliability mechanisms, each testable alone:
   code resolves both against what tools actually returned. An unresolvable citation
   earns one correction order, then the answer is withheld (`citation_error`) — an
   unverifiable answer is never delivered (`agent/citations.py`)
+- **Route-then-bind** — corpus questions route over deterministic document cards,
+  then tools are scoped to the routed set; grounding is scored as
+  *citation-verified* (the cited document literally prints the value), never as
+  agreement with an expected source (`pageindex/route.py`, `pageindex/cards.py`)
+- **Table normalizer** — padding squeeze, wrapped-label reassembly, block-period
+  forward-fill, and caption defusing run as an extraction invariant at all three
+  rungs; a vision table substantially overlapping a sane deterministic table never
+  enters the merge, because deterministic beats probabilistic when both claim one
+  region (`extraction/table_normalizer.py`)
+- **Quarantine, not rejection** — an oversize chunk is quarantined and tagged; the
+  other 99% of the document still becomes substrate (v1 rejected whole documents)
 - **Budget guard** — per-document cap on vision spend; exhaustion is recorded, never
   hidden
 - **The ledger** — every routing decision with its coverage, cost, and timing
@@ -116,11 +134,55 @@ out-of-sample set τ escalated 2.6% of native pages and the GAO report 0%.
 - Agent on holdout: **zero fabricated answers, zero citation errors**; 6 of 16 questions
   crashed on the tool-round limit instead of answering
 - Test suite: unit, adapter round-trips, router ladder, citation integrity, corpus
-  tools, audit verdicts; the one skip is the gated Docling download
+  tools, audit verdicts; skips are the gated Docling download and the
+  Postgres-gated backend contract tests (run with `RUN_POSTGRES=1`)
 
-The sealed run evaluated the single-document, three-tool agent. Features added after
-the seal — inline `[n]` claim markers, figure inspection, the agent trace view, and
-corpus mode — are covered by unit tests but not yet by a sealed evaluation.
+The sealed run evaluated the single-document, three-tool agent. Everything added
+after that seal — corpus mode, routing, the audit rework, quarantine, termination —
+was sealed separately in v2, below.
+
+## Sealed evaluation v2
+
+After the v2 arc (quarantine, agent termination, storage backends, table
+normalization, routing), a second sealed evaluation: 37 fresh questions authored
+against the substrate before any run, every expected value verified as literally
+printed, one shot each, no retries, no code changes. Total spend $4.15.
+
+| band | measure | result |
+|---|---|---|
+| answerable, single-document (14) | correct | **14/14** |
+| | citation-verified (cited doc prints the value) | **14/14** |
+| | cost/run | $0.12 |
+| adversarial, single-document (6) | honest `not_found`, zero citations | **6/6** |
+| | cost/run | $0.25 |
+| corpus mode (8) | correct — as scored / after authoring corrections | 5/8 / **7/8** |
+| | citation-verified — as scored / corrected | 4/8 / 6/8 |
+| | target document in routed set | 7/8 |
+| audit claims (9) | verdict correct | **8/9** |
+| | receipt from the correct document | 7/9 |
+
+**Zero fabricated citations in 37 runs.** Every adversarial decline cited nothing;
+all three absent audit claims returned UNVERIFIABLE; the claim whose value is
+printed in four documents verified against a document that genuinely prints it.
+
+Both numbers, per the house rule: two corpus questions were mis-scored by the
+eval's own authoring — in one the agent's answer (52.3%) was right and the recorded
+expectation (48.1%) was the author reading the wrong half of a sentence; in the
+other the agent summed a table to ETB 18,821.95 million where the expectation
+held the prose figure 18.8 billion — same quantity, units the string-match can't
+see. Neither run was repeated; both raw and corrected numbers stand above.
+
+The three genuine failures, diagnosed: one honest decline (the total lived in
+unretrieved prose; the agent reported the components and refused to assemble an
+uncitable sum), one routing miss that failed safe (wrong candidate pool → honest
+`not_found`, not a confident wrong answer), and one identity-free audit claim —
+see the doctrine note under honest limits.
+
+v2 also re-measured v1's weakest number: after the table normalizer and
+rung-overlap resolution, cell accuracy over the full ground-truth set — tuning and
+held-out tables together — went **68.5% → 96.7%** (63/92 → 89/92) —
+and the composition of the remainder changed honestly (three formerly
+accidentally-right cells now report MISSING and name the defect).
 
 ## Quickstart
 
@@ -178,17 +240,21 @@ src/refinery/
                router.py (the ladder) · sanity.py
   coverage/    ink.py · residual.py        geometry/  grid.py
   chunking/    sections.py · engine.py · validator.py
-  pageindex/   tree.py                     retrieval/  embedder.py · vector_store.py
-  data/        fact_table.py · orientation.py
+  pageindex/   tree.py · cards.py · route.py
+  retrieval/   embedder.py · vector_store.py
+  data/        fact_table.py · postgres_facts.py · orientation.py · ledger_store.py
+  storage/     artifacts.py (file / Postgres JSONB behind one protocol)
   agent/       tools.py · loop.py · citations.py · figures.py · corpus.py
   audit/       verify.py                   visual/     overlay.py
-scripts/       stage0_measure · triage_corpus · coverage_corpus · ingest · ask · audit_claim · report
+scripts/       stage0_measure · triage_corpus · coverage_corpus · ingest · ask ·
+               audit_claim · build_cards · report
 app/           api.py (FastAPI) · ui/ (React — Trace, Ask, Agent, Audit)
-eval/          ground_truth/ · table_accuracy.py · retrieval_precision.py · questions.yaml
+eval/          ground_truth/ · table_accuracy.py · retrieval_precision.py ·
+               routing_accuracy.py · questions.yaml
 rubric/        extraction_rules.yaml
 ```
 
-## Honest limits (v1)
+## Honest limits
 
 - The residual measures *claimed area*, not transcription correctness; sanity checks
   catch structural corruption, and the ground-truth eval catches row dropout —
@@ -205,25 +271,39 @@ rubric/        extraction_rules.yaml
 - Deferred: ColPali-style visual retrieval, FTS5 hybrid fusion, LLM section
   summaries, a formal τ calibration study
 
-Found by the sealed evaluation, and unfixed by design — v1 stopped when measurement
-stopped:
+Found by the v1 sealed evaluation; the v2 arc fixed each one with a measurement
+before and after:
 
-- **Chunk validation is all-or-nothing.** One 1,283-token chunk against a 900-token
-  budget rejected a whole 155-page report: extraction and coverage had already
-  succeeded, but no substrate was written and the document is unqueryable. The
-  validator refusing to emit an unconstitutional chunk is correct; having no path
-  between "valid" and "nothing at all" is not
+- **Chunk validation was all-or-nothing.** One 1,283-token chunk against a 900-token
+  budget rejected a whole 155-page report. v2 quarantines the offending chunk and
+  writes the rest — that report is now queryable, its quarantined chunk tagged in
+  the trace
+- **Agent termination did not scale.** Six of sixteen v1 sealed questions crashed on
+  the tool-round limit. v2 added a wrap-up nudge before the limit and a graceful
+  `no_convergence` floor: the same six questions now terminate, and zero of 37 v2
+  sealed runs crashed
+- **Table accuracy was shape-dependent** (92.1% tuning / 68.5% held out). The v2
+  normalizer and rung-overlap resolution brought that same 92-cell set to 96.7%
+  — and the residue is named per cell (MISSING with the defect) rather
+  than silently wrong
+
+Still open, found by the v2 sealed evaluation and left standing when measurement
+said stop:
+
+- **An identity-free claim over same-genre siblings is ambiguous by construction.**
+  "Capital reserve was 78,980,267" — true of one bank, no bank named — was refuted
+  against the wrong institution's (correct) capital reserve. No token router can
+  recover identity a claim does not carry; three candidate fixes were built,
+  measured, and discarded when the instrument showed them trading real accuracy for
+  luck. The queued design surfaces the ambiguity in the verdict instead of picking
+  a winner
+- **One US out-of-sample document routes poorly in corpus mode** — its card never
+  enters the candidate set, and the failure is fail-safe (honest `not_found`,
+  zero citations, never a confident wrong-document answer)
 - **Document-level triage labels mislead on design-heavy native PDFs.** A native
   annual report with 46,975 extractable characters was labelled `scanned_image`
-  because 51 of its 80 pages carry under 100 characters (one page holds 2,008 image
-  objects). It was routed to vision and exhausted its $0.50 budget on design pages
-  before reaching the text-rich ones. Per-page origin is sound; the document-level
-  aggregate of it is not
-- **Agent termination does not scale to 100+ page documents.** Six of sixteen sealed
-  questions exhausted the tool-round budget on 60–161 page documents. The failure mode
-  is honest — it crashes rather than inventing — but a crash is not an answer
-- **Table extraction accuracy is document-shape dependent** (92.1% tuning / 68.5%
-  held out), so a single cell-accuracy number should not be quoted for this system
+  because 51 of its 80 pages carry under 100 characters. Per-page origin is sound;
+  the document-level aggregate of it is not
 
 One step-6 result is worth stating as a win rather than a limit. Asked what share of
 loans went to the private sector, the agent answered **90.9%** citing page 22, while
