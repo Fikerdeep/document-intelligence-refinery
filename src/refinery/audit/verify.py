@@ -64,24 +64,40 @@ def _numbers_in(text: str) -> set[float]:
     return values
 
 
+def _candidates(facts: FactTable, words: list[str],
+                documents: list[str] | None) -> list[dict]:
+    """The first non-empty shrinking-window lookup.
+
+    A routed run walks the documents one at a time in ranked order, so the
+    verdict comes from the best-ranked document whose facts match the
+    claim's words — a value coincidentally printed in a lower-ranked
+    document cannot outrank it, and a pooled row limit cannot crowd the
+    right document out. An unscoped run searches the whole table at once.
+    """
+    scopes = [[name] for name in documents] if documents else [None]
+    for scope in scopes:
+        for size in range(len(words), 0, -1):
+            rows = facts.lookup(words[:size], scope)
+            if rows:
+                return rows
+    return []
+
+
 def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str,
                  documents: list[str] | None = None) -> Verdict:
     """Verify one numeric claim; every verdict names its evidence.
 
-    When ``documents`` is given (the card-routed set), candidate facts come
-    only from those documents — two reports printing the same value can no
-    longer swap receipts. Without it the whole fact table is searched.
+    When ``documents`` is given (the card-routed set, best first), routing
+    both selects the pool and ranks within it: candidates come from the
+    first routed document that speaks to the claim (see ``_candidates``).
+    Without it the whole fact table is searched.
     """
     corpus_dir = Path(corpus_dir)
     value, words = _claim_parts(claim)
     if value is None:
         return Verdict(status="UNVERIFIABLE",
                        detail="no numeric value found in the claim (v1 audits numbers)")
-    candidates = []
-    for size in range(len(words), 0, -1):
-        candidates = facts.lookup(words[:size], documents)
-        if candidates:
-            break
+    candidates = _candidates(facts, words, documents)
     if not candidates:
         return Verdict(status="UNVERIFIABLE",
                        detail=f"no fact matches key words {words[:4]}")

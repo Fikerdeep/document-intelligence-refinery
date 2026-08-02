@@ -63,11 +63,10 @@ def test_claim_without_a_number_is_out_of_scope(corpus):
 @pytest.fixture(scope="module")
 def twin_corpus(tmp_path_factory):
     folder = tmp_path_factory.mktemp("twin_corpus")
-    rows = [["Metric", "2023"], ["Revenue", "4,200"]]
-    for name in ("alpha.pdf", "beta.pdf"):
-        _table_pdf(folder / name, rows)
+    tables = {"alpha.pdf": "4,200", "beta.pdf": "4,200", "gamma.pdf": "3,300"}
     facts = FactTable(folder / "facts.db")
-    for name in ("alpha.pdf", "beta.pdf"):
+    for name, value in tables.items():
+        _table_pdf(folder / name, [["Metric", "2023"], ["Revenue", value]])
         assert facts.populate(extract_document(folder / name), name) > 0
     return folder, facts
 
@@ -92,3 +91,21 @@ def test_scoping_to_a_document_without_the_fact_abstains(twin_corpus):
     facts_only_alpha = verify_claim("Costs were 9,999 in 2023", facts, folder,
                                     documents=["alpha.pdf"])
     assert facts_only_alpha.status == "UNVERIFIABLE"
+
+
+def test_routed_order_decides_the_receipt(twin_corpus):
+    folder, facts = twin_corpus
+    for order in (["alpha.pdf", "beta.pdf"], ["beta.pdf", "alpha.pdf"]):
+        verdict = verify_claim("Revenue was 4,200 in 2023", facts, folder,
+                               documents=order)
+        assert verdict.status == "VERIFIED"
+        assert verdict.receipt["document"] == order[0]
+
+
+def test_ranked_document_renders_the_verdict(twin_corpus):
+    folder, facts = twin_corpus
+    verdict = verify_claim("Revenue was 3,300 in 2023", facts, folder,
+                           documents=["alpha.pdf", "gamma.pdf"])
+    assert verdict.status == "REFUTED"
+    assert verdict.receipt["document"] == "alpha.pdf"
+    assert "4,200" in verdict.detail
