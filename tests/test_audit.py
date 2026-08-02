@@ -115,7 +115,7 @@ def test_refutation_notes_a_sibling_printing_the_claimed_value(twin_corpus):
     folder, facts = twin_corpus
     verdict = verify_claim("Revenue was 3,300 in 2023", facts, folder,
                            documents=["alpha.pdf", "gamma.pdf"])
-    assert "note: gamma.pdf prints exactly 3300" in verdict.detail
+    assert "note: gamma.pdf prints exactly 3,300" in verdict.detail
 
 
 def test_no_note_when_the_claimed_value_is_printed_nowhere(twin_corpus):

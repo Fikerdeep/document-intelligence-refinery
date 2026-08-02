@@ -84,8 +84,9 @@ def _candidates(facts: FactTable, words: list[str],
 
 
 def _printed_elsewhere(facts: FactTable, words: list[str], value: float,
-                       documents: list[str], exclude: str) -> str | None:
-    """The best-ranked other routed document whose facts print exactly ``value``.
+                       documents: list[str], exclude: str) -> tuple[str, str] | None:
+    """The best-ranked other routed document printing exactly ``value``,
+    with the printed string itself.
 
     An identity-free claim over same-genre siblings is ambiguous by
     construction; when the verdict-rendering document refutes it but another
@@ -99,9 +100,10 @@ def _printed_elsewhere(facts: FactTable, words: list[str], value: float,
             rows = facts.lookup(words[:size], [name])
             if not rows:
                 continue
-            if any(row["value_num"] is not None
-                   and abs(row["value_num"] - value) <= 1e-9 for row in rows):
-                return name
+            match = next((row for row in rows if row["value_num"] is not None
+                          and abs(row["value_num"] - value) <= 1e-9), None)
+            if match:
+                return name, match["value_raw"]
             break
     return None
 
@@ -155,7 +157,8 @@ def verify_claim(claim: str, facts: FactTable, corpus_dir: Path | str,
     elsewhere = _printed_elsewhere(facts, words, value, documents or [],
                                    closest["document"])
     if elsewhere:
-        detail += (f" — note: {elsewhere} prints exactly {value:g}, and the "
+        name, printed = elsewhere
+        detail += (f" — note: {name} prints exactly {printed}, and the "
                    "claim does not name its document")
     return Verdict(status="REFUTED", detail=detail,
                    receipt={"document": closest["document"], "page": closest["page"],

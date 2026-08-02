@@ -51,17 +51,40 @@ def run_select(conn: sqlite3.Connection, sql: str) -> list[dict]:
 
 CAPTION_PROXIMITY_PT = 72.0
 CAPTION_TEXT = re.compile(r"^table\s*\d+\b", re.IGNORECASE)
+TABLE_SIG = re.compile(r"table\s*\d+\s*:", re.IGNORECASE)
+
+
+def dedupe_caption(text: str | None) -> str | None:
+    """Collapse a caption welded to a copy of itself.
+
+    Rung B occasionally emits one caption twice in a single string, the
+    first copy sometimes truncated mid-word (census 2026-08-02: 4 of 44
+    stored captions across three documents). An exact doubling keeps one
+    half; repeated ``Table N:`` signatures keep the last copy, which the
+    exhibits show is the complete one.
+    """
+    if not text:
+        return text
+    half, odd = divmod(len(text), 2)
+    if not odd and text[:half] == text[half:]:
+        return text[:half]
+    marks = [m.start() for m in TABLE_SIG.finditer(text)]
+    if len(marks) > 1:
+        return text[marks[-1]:]
+    return text
 
 
 def _table_context(element, texts_by_page: dict) -> str | None:
     """The caption naming WHICH table a bare key belongs to, from the
     cheapest source that has it: text the normalizer defused out of the
     cells, the caption the extractor attached to the element, or the
-    nearest caption-shaped text block within CAPTION_PROXIMITY_PT."""
+    nearest caption-shaped text block within CAPTION_PROXIMITY_PT. Every
+    source passes through ``dedupe_caption``: a welded double caption is
+    junk whichever source produced it."""
     if element.table.context:
-        return element.table.context
+        return dedupe_caption(element.table.context)
     if element.caption:
-        return " ".join(element.caption.split())[:300]
+        return dedupe_caption(" ".join(element.caption.split())[:300])
     best, best_gap = None, CAPTION_PROXIMITY_PT + 1.0
     for text in texts_by_page.get(element.bbox.page, []):
         if not CAPTION_TEXT.match(text.text.strip()):

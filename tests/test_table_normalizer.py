@@ -106,3 +106,25 @@ def test_populate_uses_block_periods(tmp_path):
         2065.91, 711.02, 2248.04, 730.25, 2739.64, 2820.31]
     assert [row["period"] for row in rows] == [
         "2018/19", "2018/19", "2019/20", "2019/20", "2020/21", "2020/21"]
+
+
+def test_dedupe_caption_collapses_exact_doubling():
+    from refinery.data.fact_table import dedupe_caption
+
+    assert dedupe_caption("StrengtheningStrengthening") == "Strengthening"
+
+
+def test_dedupe_caption_keeps_the_last_complete_signature_copy():
+    from refinery.data.fact_table import dedupe_caption
+
+    welded = ("Table 1: General, Food and Non-Foo"
+              "Table 1: General, Food and Non-Food Inflation")
+    assert dedupe_caption(welded) == "Table 1: General, Food and Non-Food Inflation"
+
+
+def test_dedupe_caption_leaves_clean_captions_alone():
+    from refinery.data.fact_table import dedupe_caption
+
+    clean = "Table 4.1. Tax expenditures by type (in ETB million)"
+    assert dedupe_caption(clean) == clean
+    assert dedupe_caption(None) is None
