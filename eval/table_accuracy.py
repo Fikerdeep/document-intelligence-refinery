@@ -17,13 +17,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
 
 
 def normalize(key: str) -> str:
-    return " ".join(key.lower().replace("-", " ").split())
+    """Collapse a printed label to lowercase alphanumerics.
+
+    Extraction and the hand labels disagree about where spaces and hyphens
+    fall inside a period label — ``July EFY2010 - July EFY2011`` against the
+    stored ``July EFY 2010 - JulyEFY2011`` — so any separator-preserving
+    comparison scores a correct extraction as a miss. Dropping separators
+    bridges those. It also collapses genuinely distinct labels, which is
+    safe only because ``match`` still refuses a bucket holding more than
+    one literal.
+    """
+    return re.sub(r"[^a-z0-9]", "", key.lower())
 
 
 def match(label: str, exact: dict[str, list[float]],
