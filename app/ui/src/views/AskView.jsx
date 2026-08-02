@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ask, pageUrl } from "../api.js";
+import { askStream, pageUrl } from "../api.js";
 
 export default function AskView({ doc, seeded, onRun }) {
   const [question, setQuestion] = useState("");
@@ -7,6 +7,8 @@ export default function AskView({ doc, seeded, onRun }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  const [steps, setSteps] = useState([]);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (!seeded) return;
@@ -17,15 +19,19 @@ export default function AskView({ doc, seeded, onRun }) {
 
   const submit = () => {
     if (!question.trim() || !doc) return;
-    setBusy(true); setError(null); setResult(null);
+    setBusy(true); setError(null); setResult(null); setSteps([]); setElapsed(0);
     const asked = question;
-    ask(doc.doc_id, asked)
-      .then((r) => {
-        setResult(r);
-        if (onRun) onRun({ question: asked, doc: doc.source_name, result: r });
-      })
+    const started = Date.now();
+    const tick = setInterval(() => setElapsed((Date.now() - started) / 1000), 100);
+    askStream(doc.doc_id, asked, (ev) => {
+      if (ev.event === "tool") setSteps((prev) => [...prev, ev.tool]);
+      else if (ev.event === "result") {
+        setResult(ev);
+        if (onRun) onRun({ question: asked, doc: doc.source_name, result: ev });
+      } else if (ev.event === "error") setError(ev.detail);
+    })
       .catch((e) => setError(e.message))
-      .finally(() => setBusy(false));
+      .finally(() => { clearInterval(tick); setBusy(false); });
   };
 
   const renderAnswer = (text, citations) =>
@@ -67,6 +73,14 @@ export default function AskView({ doc, seeded, onRun }) {
 
       {error && <div className="error">{error}</div>}
 
+      {busy && (
+        <div className="seeded">
+          {elapsed.toFixed(1)}s · {steps.length
+            ? `${steps.length} tool call${steps.length > 1 ? "s" : ""} · ${steps[steps.length - 1]}`
+            : "thinking…"}
+        </div>
+      )}
+
       {result && result.routed && result.routed.length > 0 && (
         <div className="seeded">
           routed to: {result.routed.join("  ·  ")}
@@ -101,28 +115,23 @@ export default function AskView({ doc, seeded, onRun }) {
       )}
 
       {result && result.status !== "no_convergence" && result.status !== "citation_error" && (
-        <>
-          <div className="trace-steps">
-            {result.tool_trace.map((step, i) => (
-              <div key={i} className="step" style={{ animationDelay: `${i * 0.12}s` }}>
-                <span className="n">{i + 1}</span>
-                <code>{step}</code>
-              </div>
+        <div className={"answer" + (result.status === "not_found" ? " notfound" : "")}>
+          <div className="text">{renderAnswer(result.answer, result.citations)}</div>
+          <div className="citations">
+            {result.citations.map((c, i) => (
+              <button key={c.content_hash} className="cite" onClick={() => setReceipt(c)}>
+                [{i + 1}] {c.document} · p.{c.page}
+              </button>
             ))}
+            {result.status === "not_found" &&
+              <span className="tag amber">not found — the honest answer</span>}
+            {result.elapsed_s != null && (
+              <span className="tag gray">
+                {(result.tool_log || []).length} tool calls · {result.elapsed_s}s — full trace in the Agent tab
+              </span>
+            )}
           </div>
-          <div className={"answer" + (result.status === "not_found" ? " notfound" : "")}>
-            <div className="text">{renderAnswer(result.answer, result.citations)}</div>
-            <div className="citations">
-              {result.citations.map((c, i) => (
-                <button key={c.content_hash} className="cite" onClick={() => setReceipt(c)}>
-                  [{i + 1}] {c.document} · p.{c.page}
-                </button>
-              ))}
-              {result.status === "not_found" &&
-                <span className="tag amber">not found — the honest answer</span>}
-            </div>
-          </div>
-        </>
+        </div>
       )}
 
       {receipt && (

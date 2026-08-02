@@ -12,6 +12,26 @@ export const pageUrl = (docId, page, bbox) =>
 export const ask = (docId, question) =>
   fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ doc_id: docId, question }) }).then(json);
+export const askStream = async (docId, question, onEvent) => {
+  const r = await fetch("/api/ask/stream", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_id: docId, question }) });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.detail || r.statusText);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) if (line.trim()) onEvent(JSON.parse(line));
+  }
+};
 export const audit = (claim) =>
   fetch("/api/audit", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ claim }) }).then(json);

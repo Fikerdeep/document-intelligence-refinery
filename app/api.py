@@ -14,13 +14,17 @@ langchain-anthropic and answers 503 without them.
 from __future__ import annotations
 
 import io
+import json
 import os
+import queue
+import threading
+import time
 from pathlib import Path
 
 import fitz
 import yaml
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -174,8 +178,7 @@ class AskRequest(BaseModel):
     question: str
 
 
-@app.post("/api/ask")
-def ask(request: AskRequest) -> dict:
+def _ask_guard():
     rules = load_rules(RULES_PATH)
     if not os.environ.get(rules.vision.api_key_env):
         raise HTTPException(503, f"set {rules.vision.api_key_env} to enable the agent")
@@ -183,6 +186,12 @@ def ask(request: AskRequest) -> dict:
         import langchain_anthropic
     except ImportError:
         raise HTTPException(503, "pip install langchain-anthropic to enable the agent")
+    return rules
+
+
+def _execute_ask(request: AskRequest, wrap=None) -> dict:
+    """Run the agent for one question; ``wrap`` may decorate each tool call."""
+    rules = _ask_guard()
     import sys
     sys.path.insert(0, "scripts")
     from ask import build_chat
@@ -247,12 +256,16 @@ def ask(request: AskRequest) -> dict:
                            request.doc_id,
                            inspector_for(request.doc_id,
                                          _profile(request.doc_id)["source_name"]))
+    if wrap:
+        tools = {name: wrap(name, fn) for name, fn in tools.items()}
     from langgraph.errors import GraphRecursionError
+    started = time.perf_counter()
     try:
         result = run_agent(request.question, build_chat(rules), tools, system=system)
     except GraphRecursionError:
         return {"answer": "", "status": "no_convergence", "tool_trace": [],
                 "tool_log": [], "routed": routed_names, "citations": [],
+                "elapsed_s": round(time.perf_counter() - started, 1),
                 "doc_id": request.doc_id}
     doc_ids = {}
     for doc_id in ARTIFACTS.ids("profiles"):
@@ -266,7 +279,48 @@ def ask(request: AskRequest) -> dict:
                            "doc_id": doc_ids.get(c.document, request.doc_id),
                            "bbox": [c.bbox.x0, c.bbox.y0, c.bbox.x1, c.bbox.y1]}
                           for c in result.provenance.citations],
+            "elapsed_s": round(time.perf_counter() - started, 1),
             "doc_id": request.doc_id}
+
+
+@app.post("/api/ask")
+def ask(request: AskRequest) -> dict:
+    return _execute_ask(request)
+
+
+@app.post("/api/ask/stream")
+def ask_stream(request: AskRequest) -> StreamingResponse:
+    """The same run as /api/ask, delivered as NDJSON: one line per tool call
+    as it happens, then the full result. Answer text is never streamed —
+    citations are validated only once the answer is complete."""
+    _ask_guard()
+    events: queue.Queue = queue.Queue()
+
+    def wrap(name, fn):
+        def inner(**kwargs):
+            events.put({"event": "tool", "tool": name, "args": kwargs})
+            return fn(**kwargs)
+        return inner
+
+    def work():
+        try:
+            events.put({"event": "result", **_execute_ask(request, wrap)})
+        except HTTPException as failure:
+            events.put({"event": "error", "detail": failure.detail})
+        except Exception as failure:
+            events.put({"event": "error", "detail": str(failure)})
+        events.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 
 class AuditRequest(BaseModel):
