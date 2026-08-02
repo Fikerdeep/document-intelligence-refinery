@@ -90,3 +90,21 @@ def test_script_counts_detects_ethiopic():
 def test_confidence_is_high_far_from_the_gate(native_pdf, rules):
     profile = profile_document(native_pdf, rules)
     assert all(p.confidence > 0.8 for p in profile.pages)
+
+
+def test_dominant_origin_is_mixed_without_a_real_majority():
+    from refinery.models.profile import (DocumentProfile, Layout, OriginType,
+                                         PageProfile, Rung)
+
+    def page(number, origin):
+        return PageProfile(page=number, origin_type=origin,
+                           layout=Layout.MIXED, recommended_rung=Rung.LAYOUT,
+                           confidence=0.5, signals={})
+
+    pages = [page(i + 1, OriginType.SCANNED_IMAGE) for i in range(45)]
+    pages += [page(i + 46, OriginType.NATIVE_DIGITAL) for i in range(35)]
+    disputed = DocumentProfile(doc_id="d", source_name="ethswitch.pdf", pages=pages)
+    assert disputed.dominant_origin is OriginType.MIXED
+    unanimous = DocumentProfile(doc_id="d", source_name="scan.pdf",
+                                pages=[page(1, OriginType.SCANNED_IMAGE)])
+    assert unanimous.dominant_origin is OriginType.SCANNED_IMAGE
