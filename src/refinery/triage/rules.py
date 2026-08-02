@@ -6,6 +6,8 @@ decision is reproducible from the stored signals alone.
 
 from __future__ import annotations
 
+import re
+
 from refinery.config import Rules
 from refinery.models.profile import Layout, OriginType, Rung
 
@@ -52,9 +54,15 @@ def detect_language(signals: dict[str, float]) -> str:
 
 
 def domain_hint(document_text: str, rules: Rules) -> str:
-    """Keyword vote over the whole document's text; pluggable by design."""
+    """Keyword vote over the whole document's text; pluggable by design.
+
+    Keywords match on word boundaries: ``patient`` inside ``Inpatient
+    hospital services`` is not medical evidence, and substring counting
+    was the only reason a consumer-price bulletin ever scored medical.
+    """
     lowered = document_text.lower()
-    scores = {domain: sum(lowered.count(kw) for kw in kws)
+    scores = {domain: sum(len(re.findall(rf"\b{re.escape(kw)}\b", lowered))
+                          for kw in kws)
               for domain, kws in rules.triage.domain_keywords.items()}
     best = max(scores, key=scores.get)
     return best if scores[best] >= 3 else "general"

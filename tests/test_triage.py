@@ -73,6 +73,15 @@ def test_domain_hint_prefers_financial_vocabulary(native_pdf, rules):
     assert profile.pages[0].domain_hint == "financial"
 
 
+def test_domain_keywords_match_whole_words_only(rules):
+    from refinery.triage.rules import domain_hint
+
+    inside_words = "Inpatient hospital services. Outpatient hospital services. " * 3
+    assert domain_hint(inside_words, rules) != "medical"
+    as_words = "The patient received a clinical dosage of the pharmaceutical."
+    assert domain_hint(as_words, rules) == "medical"
+
+
 def test_script_counts_detects_ethiopic():
     eth, lat = script_counts("የኦዲት ግኝት መረጃ audit")
     assert eth > 0 and lat == 5
