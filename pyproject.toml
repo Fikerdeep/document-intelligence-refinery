@@ -2,6 +2,10 @@
 name = "document-intelligence-refinery"
 version = "0.0.1"
 description = "Multi-stage document-extraction pipeline: coverage-residual routing, structure-preserving chunking, provenance-verified answers."
+authors = [{ name = "Fikerte Alemayehu" }]
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     # pinned: find_tables grids are version-sensitive, and the measured table
@@ -18,6 +22,9 @@ dependencies = [
     "langgraph>=0.2",
     "langchain-core>=0.3",
 ]
+
+[project.urls]
+Repository = "https://github.com/Fikerdeep/document-intelligence-refinery"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]

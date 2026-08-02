@@ -5,6 +5,10 @@
 # --- internal working documents: stay local, never committed ---
 HANDOFF.md
 DOMAIN_NOTES.md
+SEALED_EVAL*
+sealed_*.yaml
+sealed_*.jsonl
+*.jsonl
 
 # --- environments ---
 .venv/

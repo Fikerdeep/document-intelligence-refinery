@@ -13,12 +13,12 @@ in doubt. Cost scales with the area of doubt, not the page count.
 
 ## The thesis in two pictures
 
-The same table, twice. Green = ink the extraction claimed; red = ink it left
-unexplained.
+The same page of a US GAO financial audit, twice. Green = ink the extraction
+claimed; red = ink it left unexplained.
 
 | Native PDF — coverage 100% | Rasterized scan — coverage 0%, ESCALATE |
 |---|---|
-| ![native](docs/assets/overlay_native.png) | ![scan](docs/assets/overlay_scan_escalating.png) |
+| ![native](docs/assets/overlay_native_gao.png) | ![scan](docs/assets/overlay_scan_escalating_gao.png) |
 
 ## What it does
 
@@ -333,3 +333,15 @@ Four tabs:
   returned output
 - **Audit** — verdict stamps (VERIFIED / REFUTED / UNVERIFIABLE) with the receipt
   highlighted on the source page
+
+| Trace | Ask |
+|---|---|
+| ![Trace](docs/assets/ui_trace.png) | ![Ask](docs/assets/ui_ask.png) |
+
+| Agent | Audit |
+|---|---|
+| ![Agent](docs/assets/ui_agent.png) | ![Audit](docs/assets/ui_audit.png) |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
