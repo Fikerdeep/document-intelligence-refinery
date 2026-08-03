@@ -81,13 +81,17 @@ class VectorStore:
 
     def search(self, query: str, k: int = 6, section: str | None = None,
                doc_id: str | None = None,
-               doc_ids: list[str] | None = None) -> list[dict]:
-        """Nearest chunks, scoped to a section subtree, one document, or a
-        routed set of documents."""
+               doc_ids: list[str] | None = None,
+               document: str | None = None) -> list[dict]:
+        """Nearest chunks, scoped to a section subtree, one document (by id
+        or by source name), or a routed set of documents."""
         conditions = []
         if section:
             conditions.append(FieldCondition(key="section_ancestors",
                                              match=MatchValue(value=section)))
+        if document:
+            conditions.append(FieldCondition(key="document",
+                                             match=MatchValue(value=document)))
         if doc_id:
             conditions.append(FieldCondition(key="doc_id",
                                              match=MatchValue(value=doc_id)))

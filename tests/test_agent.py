@@ -223,6 +223,23 @@ def test_corpus_search_spans_documents(tmp_path):
     assert {hit["document"] for hit in hits} == {"a.pdf", "b.pdf"}
 
 
+def test_corpus_search_honors_a_document_name_as_scope(tmp_path):
+    trees, store, facts = _two_doc_substrate(tmp_path)
+    tools = make_corpus_tools(trees, store, facts)
+    result = tools["semantic_search"]("total revenue 2023", section="b.pdf")
+    assert {hit["document"] for hit in result["hits"]} == {"b.pdf"}
+    assert "is a document, not a section" in result["note"]
+
+
+def test_corpus_search_says_so_when_a_section_matches_nothing(tmp_path):
+    trees, store, facts = _two_doc_substrate(tmp_path)
+    tools = make_corpus_tools(trees, store, facts)
+    result = tools["semantic_search"]("total revenue 2023",
+                                      section="Executive summary")
+    assert result["hits"]
+    assert "no section named 'Executive summary'" in result["note"]
+
+
 def test_corpus_sql_sees_every_document(tmp_path):
     trees, store, facts = _two_doc_substrate(tmp_path)
     tools = make_corpus_tools(trees, store, facts)

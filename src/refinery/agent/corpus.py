@@ -61,14 +61,32 @@ def make_corpus_tools(trees: list[PageIndexNode], store: VectorStore,
                               "contains": child.data_types_present}
                              for child in node.child_sections]}
 
+    titles = {tree.title for tree in trees}
+
+    def _hits(query: str, section: str | None = None,
+              document: str | None = None) -> list[dict]:
+        hits = store.search(query, k=6, section=section, doc_id=None,
+                            doc_ids=doc_ids, document=document)
+        return [{"content": hit["content"][:400],
+                 "content_hash": hit["content_hash"],
+                 "document": hit["document"], "pages": hit["pages"],
+                 "bbox": hit["bbox"], "score": hit["score"]}
+                for hit in hits]
+
     def semantic_search(query: str, section: str = "") -> dict:
-        hits = store.search(query, k=6, section=section or None,
-                            doc_id=None, doc_ids=doc_ids)
-        return {"hits": [{"content": hit["content"][:400],
-                          "content_hash": hit["content_hash"],
-                          "document": hit["document"], "pages": hit["pages"],
-                          "bbox": hit["bbox"], "score": hit["score"]}
-                         for hit in hits]}
+        """A section filter that matches nothing never fails silently: a
+        document title is honored as document scope, and an unknown section
+        falls back to an unscoped search that says so."""
+        if section in titles:
+            return {"hits": _hits(query, document=section),
+                    "note": f"{section!r} is a document, not a section — "
+                            "searched within that whole document"}
+        hits = _hits(query, section=section or None)
+        if not hits and section:
+            return {"hits": _hits(query),
+                    "note": f"no section named {section!r} — searched all "
+                            "sections instead"}
+        return {"hits": hits}
 
     def structured_query(sql: str) -> dict:
         try:
