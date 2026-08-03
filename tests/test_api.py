@@ -29,6 +29,7 @@ def client(tmp_path, monkeypatch):
     (refinery / "chunks" / "d1.json").write_text("[]")
     monkeypatch.setenv("REFINERY_DIR", str(refinery))
     monkeypatch.setenv("REFINERY_CORPUS_DIRS", str(tmp_path))
+    monkeypatch.delenv("REFINERY_DB_URL", raising=False)
     import app.api as api
     importlib.reload(api)
     return TestClient(api.app)
