@@ -209,6 +209,38 @@ def _two_doc_substrate(tmp_path):
     return [tree_for("a.pdf", 9), tree_for("b.pdf", 12)], store, facts
 
 
+def _prefixed_substrate(tmp_path):
+    text = "Total revenue reached 4,200 in 2023."
+    ldu = LDU(content=text, chunk_type=ChunkType.TEXT, page_refs=[4],
+              bbox=BBox(x0=72, y0=100, x1=500, y1=130, page=4),
+              parent_section="4. Finance", token_count=9,
+              content_hash=content_hash(text))
+    store = VectorStore(tmp_path / "store", HashEmbedder(64))
+    store.ingest("d1", "report.pdf", [ldu])
+    facts = FactTable(tmp_path / "facts.db")
+    tree = PageIndexNode(title="report.pdf", page_start=1, page_end=9,
+                         child_sections=[PageIndexNode(
+                             title="4. Finance", page_start=3, page_end=5,
+                             child_sections=[], key_entities=[], summary="",
+                             data_types_present=["text"])],
+                         key_entities=[], summary="", data_types_present=[])
+    return make_tools(tree, store, facts, "d1")
+
+
+def test_search_resolves_an_unprefixed_section_title(tmp_path):
+    tools = _prefixed_substrate(tmp_path)
+    result = tools["semantic_search"]("revenue 2023", section="Finance")
+    assert result["hits"]
+    assert result["note"] == "section 'Finance' matched '4. Finance'"
+
+
+def test_search_says_so_when_a_section_matches_nothing(tmp_path):
+    tools = _prefixed_substrate(tmp_path)
+    result = tools["semantic_search"]("revenue 2023", section="Appendix Z")
+    assert result["hits"]
+    assert "no section named 'Appendix Z'" in result["note"]
+
+
 def test_corpus_navigate_lists_every_document(tmp_path):
     trees, store, facts = _two_doc_substrate(tmp_path)
     tools = make_corpus_tools(trees, store, facts)

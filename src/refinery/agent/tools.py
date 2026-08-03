@@ -70,6 +70,26 @@ def _find_node(root: PageIndexNode, path: str) -> PageIndexNode | None:
     return None
 
 
+def _resolve_section(root: PageIndexNode, name: str) -> str:
+    """The tree title a loose section name means.
+
+    Models rarely repeat numbering prefixes — they ask for 'Tax expenditure
+    estimates' when the title is '4. Tax expenditure estimates' — and an
+    exact-only filter would silently match nothing. An exact title wins,
+    else the first title containing the name, else the name unchanged.
+    """
+    if _find_node(root, name) is not None:
+        return name
+    wanted = name.strip().lower()
+    queue = [root]
+    while queue:
+        node = queue.pop(0)
+        if wanted and wanted in node.title.strip().lower():
+            return node.title
+        queue.extend(node.child_sections)
+    return name
+
+
 def make_tools(tree: PageIndexNode, store: VectorStore, facts: FactTable,
                doc_id: str, inspector=None) -> dict[str, Callable[..., dict]]:
     """Bind the tools to one document's substrate.
@@ -98,13 +118,28 @@ def make_tools(tree: PageIndexNode, store: VectorStore, facts: FactTable,
                               "contains": child.data_types_present}
                              for child in node.child_sections]}
 
+    def _shaped(hits: list[dict]) -> list[dict]:
+        return [{"content": hit["content"][:400],
+                 "content_hash": hit["content_hash"],
+                 "document": hit["document"], "pages": hit["pages"],
+                 "bbox": hit["bbox"], "score": hit["score"]}
+                for hit in hits]
+
     def semantic_search(query: str, section: str = "") -> dict:
-        hits = store.search(query, k=6, section=section or None, doc_id=doc_id)
-        return {"hits": [{"content": hit["content"][:400],
-                          "content_hash": hit["content_hash"],
-                          "document": hit["document"], "pages": hit["pages"],
-                          "bbox": hit["bbox"], "score": hit["score"]}
-                         for hit in hits]}
+        """A section filter that matches nothing never fails silently: loose
+        titles resolve against the tree, and an unknown section falls back
+        to the whole document and says so."""
+        resolved = _resolve_section(tree, section) if section else ""
+        hits = _shaped(store.search(query, k=6, section=resolved or None,
+                                    doc_id=doc_id))
+        if not hits and section:
+            return {"hits": _shaped(store.search(query, k=6, doc_id=doc_id)),
+                    "note": f"no section named {section!r} — searched the "
+                            "whole document instead"}
+        result = {"hits": hits}
+        if section and resolved != section:
+            result["note"] = f"section {section!r} matched {resolved!r}"
+        return result
 
     def structured_query(sql: str) -> dict:
         try:
