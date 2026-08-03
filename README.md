@@ -1,5 +1,7 @@
 # Document Intelligence Refinery
 
+![tests](https://github.com/Fikerdeep/document-intelligence-refinery/actions/workflows/ci.yml/badge.svg)
+
 A multi-stage pipeline that turns messy PDFs — native, scanned, bilingual, stamped —
 into structured, queryable, provenance-verified knowledge.
 
@@ -116,6 +118,8 @@ remainder reporting MISSING and naming its defect rather than being silently wro
 git clone <repo> && cd document-intelligence-refinery
 conda env create -f environment.yml && conda activate refinery
 pytest                                   # no network needed
+                                         # CI runs this suite + the Postgres
+                                         # contract tests on every push
 
 python scripts/ingest.py your.pdf        # works offline (hash-embedder fallback)
 export ANTHROPIC_API_KEY=...             # unlocks rung C (vision) + the agent (Claude API)
@@ -159,7 +163,8 @@ src/refinery/
   audit/       verify                      visual/     overlay
 scripts/       ingest · ask · audit_claim · build_cards · stage0_measure · report
 app/           api.py (FastAPI) · ui/ (React)
-eval/          ground_truth/ · table_accuracy · routing_accuracy · questions.yaml
+eval/          ground_truth/ · table_accuracy · routing_accuracy ·
+               agent_regression (the paid pre-release gate) · questions.yaml
 rubric/        extraction_rules.yaml
 ```
 

@@ -5,6 +5,7 @@
 # --- internal working documents: stay local, never committed ---
 HANDOFF.md
 DOMAIN_NOTES.md
+LEARNING_GUIDE.md
 SEALED_EVAL*
 sealed_*.yaml
 sealed_*.jsonl
@@ -33,3 +34,4 @@ node_modules/
 
 # --- local tool settings ---
 .claude/
+

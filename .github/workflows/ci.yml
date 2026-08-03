@@ -1,0 +1,37 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: refinery
+          POSTGRES_PASSWORD: refinery
+          POSTGRES_DB: refinery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev,ui,pg]"
+      - name: Offline suite plus Postgres contract tests
+        env:
+          RUN_POSTGRES: "1"
+          REFINERY_DB_URL: postgresql://refinery:refinery@localhost:5432/refinery
+        run: pytest -q
