@@ -103,8 +103,8 @@ termination. 37 fresh questions, $4.15 total:
 
 **Zero fabricated citations in 37 runs.** The two corrections are the eval's own
 authoring errors (the agent was right; the answer key was wrong), reported with
-both numbers. The three genuine failures all failed safe, and two have since been
-closed with measured fixes (see honest limits).
+both numbers. The three genuine failures all failed safe; since the seal, one has been
+closed outright and one now surfaces its ambiguity by design (see honest limits).
 
 v2 also re-measured v1's weakest number: table cell accuracy over the full
 92-cell ground-truth set went **68.5% → 96.7%** after the normalizer, with the
