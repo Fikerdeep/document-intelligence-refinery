@@ -70,6 +70,8 @@ The reliability mechanisms, each testable alone:
   the whole document
 - **Citation integrity** — every `[n]` resolves against what tools actually
   returned, or the answer is withheld
+- **Tools never fail silently** — a search filter that matches nothing says so
+  and falls back; SQL results without provenance say why they can't be cited
 - **Budget guard + ledger** — capped vision spend; every routing decision recorded
   with its coverage, cost, and timing
 
@@ -101,8 +103,8 @@ termination. 37 fresh questions, $4.15 total:
 
 **Zero fabricated citations in 37 runs.** The two corrections are the eval's own
 authoring errors (the agent was right; the answer key was wrong), reported with
-both numbers. The three genuine failures are diagnosed in the limits below — all
-three failed safe.
+both numbers. The three genuine failures all failed safe, and two have since been
+closed with measured fixes (see honest limits).
 
 v2 also re-measured v1's weakest number: table cell accuracy over the full
 92-cell ground-truth set went **68.5% → 96.7%** after the normalizer, with the
@@ -153,7 +155,7 @@ src/refinery/
   pageindex/   tree · cards · route        retrieval/  embedder · vector_store
   data/        fact_table · postgres_facts · orientation · ledger_store
   storage/     artifacts (file / Postgres JSONB)
-  agent/       tools · loop · citations · figures · corpus
+  agent/       prompts · tools · loop · citations · figures · corpus
   audit/       verify                      visual/     overlay
 scripts/       ingest · ask · audit_claim · build_cards · stage0_measure · report
 app/           api.py (FastAPI) · ui/ (React)
@@ -167,16 +169,31 @@ Fixed in v2, with before/after measurements: all-or-nothing chunk validation
 (155-page report recovered via quarantine), agent termination (6/16 sealed
 crashes → 0/37), shape-dependent table accuracy (68.5% → 96.7%).
 
-Still open, found by the v2 sealed evaluation:
+Fixed since the v2 seal, each with its own measurement:
+
+- **Corpus mode under-retrieved headline totals** — one sealed-eval failure and
+  one holdout question replayed in corpus mode as a control. Root
+  cause was a search filter that matched nothing and said nothing — the agent
+  passed a document name where a section name goes and concluded the value was
+  absent. Three prompt-wording fixes were built, measured, and discarded first;
+  the real fix made the tool honest (document titles become document scope,
+  unknown sections fall back and say so). Both exhibits now answer,
+  citation-verified, in fewer calls
+- **Refuted claims now name the ambiguity**: when the claim doesn't say whose
+  value it is and a sibling document prints it exactly, the verdict says so
+  instead of silently picking a winner
+- **The document-level origin label earns its majority** — below 70% page share
+  a document is honestly `mixed` (the label was display-only; routing always
+  read per-page origins)
+
+Still open:
 
 - **An identity-free claim over same-genre siblings is ambiguous by construction.**
-  "Capital reserve was 78,980,267" — true of one bank, no bank named — refuted
-  against the wrong institution's correct figure. Three fixes were built, measured,
-  and discarded when the instrument showed them trading accuracy for luck
+  "Capital reserve was 78,980,267" — true of one bank, no bank named — is refuted
+  against the best-ranked document that speaks to it; the verdict now surfaces the
+  ambiguity, but no token router can recover identity a claim does not carry
 - **One US document routes poorly in corpus mode** — fail-safe (honest `not_found`,
   never a confident wrong answer)
-- **Document-level triage aggregates mislead on design-heavy native PDFs** —
-  per-page origin is sound; the aggregate is not
 
 By design: the residual measures claimed area, not transcription correctness;
 figure readings are estimates and never enter the fact table; Audit Mode is
